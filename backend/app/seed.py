@@ -95,6 +95,32 @@ def bundle(session):
     return skills, {e["event_id"]: e for e in events["events"]}, history
 
 
+def seed_demo_manager(session):
+    # Explicit local-demo scope; existing accounts are never silently broadened.
+    if session.get(Account, "manager"):
+        return
+    person = session.get(Document, "employee:E0050")
+    if not person:
+        return
+    session.add(
+        Account(
+            username="manager",
+            role="manager",
+            employee_id="E0050",
+            password_hash=PasswordHash.recommended().hash(settings.demo_password),
+        )
+    )
+    session.add(
+        Document(
+            id="manager_scope:manager",
+            kind="manager_scope",
+            payload={"department": person.payload["department"]},
+        )
+    )
+    session.commit()
+
+
 if __name__ == "__main__":
     with Session(engine) as session:
         seed(session)
+        seed_demo_manager(session)

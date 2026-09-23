@@ -118,13 +118,38 @@ def recommendations(employee, levels, gaps, events, history, as_of, pending=(), 
             and r["event_id"] == event["event_id"]
             and cutoff <= r["date"] <= as_of
         )
-        score = weighted / sqrt(max(event["duration_hours"], 1)) / (1 + misses * 0.35)
+        # Similarity means shared developed skills, not merely delivery format.
+        # This is a bounded history factor, never a judgment about motivation.
+        developed = {b["skill_id"] for b in benefits}
+        similar_ids = {
+            other["event_id"]
+            for other in events.values()
+            if other["event_id"] != event["event_id"]
+            and not other["mandatory"]
+            and developed & {g["skill_id"] for g in other["develops_skills"]}
+        }
+        similar_misses = len(
+            {
+                r["record_id"]
+                for r in history
+                if r["employee_id"] == employee["employee_id"]
+                and r["event_id"] in similar_ids
+                and cutoff <= r["date"] <= as_of
+                and r["status"] in {"no_show", "declined", "dropped"}
+            }
+        )
+        score = (
+            weighted
+            / sqrt(max(event["duration_hours"], 1))
+            / (1 + misses * 0.35 + min(similar_misses, 3) * 0.15)
+        )
         ranked.append(
             {
                 **event,
                 "score": round(score, 4),
                 "benefits": benefits,
                 "past_misses": misses,
+                "similar_misses": similar_misses,
                 "next_session": next(
                     iter(sorted(d for d in event["upcoming_sessions"] if d >= as_of)), None
                 ),
@@ -148,6 +173,11 @@ def recommendations(employee, levels, gaps, events, history, as_of, pending=(), 
                         f"Приоритет снижен с учётом {misses} отказов/пропусков за 180 дней."
                         if misses
                         else "За 180 дней нет отказов/пропусков этого мероприятия в истории."
+                    )
+                    + (
+                        f" Учтены {similar_misses} отказа/пропуска других мероприятий по тем же навыкам за 180 дней; стоит уточнить удобный формат."
+                        if similar_misses
+                        else ""
                     )
                 ),
             }

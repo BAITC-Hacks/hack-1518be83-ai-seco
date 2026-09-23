@@ -2,7 +2,7 @@ import csv
 import hashlib
 import io
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
@@ -30,12 +30,15 @@ from app.onboarding import (
     router as onboarding_router,
 )
 from app.schemas import CompletionRequest, Employee, Goal, Login, Review
-from app.security import create_token, current_account, hr_account, password_hash
+from app.security import create_token, current_account, hr_account, password_hash, readable_employee
 from app.seed import bundle, validate_import
+from app.team import build_overview, grade_data, plan_data
+from app.team import router as team_router
 
 app = FastAPI(title="Career Quest", version="0.1.0")
 app.include_router(onboarding_router)
 app.include_router(evidence_router)
+app.include_router(team_router)
 
 
 @app.middleware("http")
@@ -105,7 +108,9 @@ def catalog(account=Depends(current_account), session: Session = Depends(get_ses
 
 
 def employee_document(eid, account, session):
-    if account.role != "hr" and account.employee_id != eid:
+    if account.role not in {"employee", "hr"} or (
+        account.role != "hr" and account.employee_id != eid
+    ):
         raise HTTPException(403, "Можно просматривать только свой профиль")
     doc = session.get(Document, f"employee:{eid}")
     if not doc:
@@ -146,6 +151,7 @@ def profile_data(employee, session, data=None):
         if metadata and metadata.get("assessment_id")
         else None
     )
+    grade = grade_data(session, employee, metadata)
     return {
         "employee": employee,
         "levels": levels,
@@ -158,6 +164,8 @@ def profile_data(employee, session, data=None):
                     **r,
                     "title": events[r["event_id"]]["title"],
                     "format": events[r["event_id"]]["format"],
+                    "mandatory": events[r["event_id"]]["mandatory"],
+                    "duration_hours": events[r["event_id"]]["duration_hours"],
                 }
                 for r in history
             ],
@@ -169,10 +177,12 @@ def profile_data(employee, session, data=None):
         ],
         "as_of": as_of,
         "mode": "rules",
-        "grade_since": metadata.get("grade_since") if metadata else None,
-        "grade_months": elapsed_months(metadata["grade_since"], as_of)
-        if metadata and metadata.get("grade_since")
+        "grade_since": grade["grade_since"],
+        "grade_months": elapsed_months(grade["grade_since"], as_of)
+        if grade["grade_since"]
         else None,
+        "grade_record": grade,
+        "development_plan": plan_data(session, employee["employee_id"]),
         "onboarding": metadata,
         "assessment": assessment.payload if assessment else None,
         "notice": "Расчёт по правилам, не AI. Самостоятельные курсы в исходной истории датированы зачислением; прирост после оценки приблизительный. Готовность не гарантирует повышение.",
@@ -181,7 +191,12 @@ def profile_data(employee, session, data=None):
 
 @app.get("/api/employees/{eid}")
 def profile(eid: str, account=Depends(current_account), session: Session = Depends(get_session)):
-    return profile_data(employee_document(eid, account, session).payload, session)
+    data = profile_data(readable_employee(eid, account, session).payload, session)
+    if account.role == "manager":
+        # Managers see development facts, not private assessment/completion evidence.
+        data["assessment"] = None
+        data["completions"] = []
+    return data
 
 
 @app.put("/api/employees/{eid}/goal")
@@ -272,81 +287,7 @@ def request_completion(
 
 @app.get("/api/hr/overview")
 def overview(account=Depends(hr_account), session: Session = Depends(get_session)):
-    skills, events, history = bundle(session)
-    employees = [
-        d.payload for d in session.exec(select(Document).where(Document.kind == "employee")).all()
-    ]
-    as_of = skills["meta"]["as_of_date"]
-    cutoff = (date.fromisoformat(as_of) - timedelta(days=90)).isoformat()
-    by_employee = {}
-    for row in history:
-        by_employee.setdefault(row["employee_id"], []).append(row)
-    rows, totals = [], {}
-    onboarding = {
-        d.payload["employee_id"]: d.payload
-        for d in session.exec(select(Document).where(Document.kind == "onboarding")).all()
-    }
-    for e in employees:
-        metadata = onboarding.get(e["employee_id"])
-        own = by_employee.get(e["employee_id"], [])
-        levels = current_skills(e, own, events, as_of)
-        gaps = gap_rows(
-            e, levels, skills["role_profiles"], {s["skill_id"]: s for s in skills["skills"]}
-        )
-        for gap in gaps:
-            if gap["gap"] and (not metadata or gap["assessed"]):
-                totals[gap["name"]] = totals.get(gap["name"], 0) + 1
-        recent = [
-            r
-            for r in own
-            if cutoff <= r["date"] <= as_of and not events[r["event_id"]]["mandatory"]
-        ]
-        misses = sum(r["status"] == "no_show" for r in recent)
-        signals = []
-        if needs_assessment(metadata):
-            signals.append("Нужна первичная оценка навыков")
-        if not e["career_goal"]:
-            signals.append("Цель пока не выбрана")
-        if misses >= 3:
-            signals.append(f"{misses} неявки за 90 дней: обсудить расписание")
-        if not recent and not needs_assessment(metadata):
-            signals.append(
-                "Нет записей о добровольном развитии за 90 дней; уточнить полноту данных"
-            )
-        rows.append(
-            {
-                "employee_id": e["employee_id"],
-                "full_name": e["full_name"],
-                "role": e["role"],
-                "grade": e["grade"],
-                "goal": e["career_goal"],
-                "readiness": profile_readiness(gaps, metadata, readiness),
-                "signals": signals,
-                "grade_since": metadata.get("grade_since") if metadata else None,
-                "grade_months": elapsed_months(metadata["grade_since"], as_of)
-                if metadata and metadata.get("grade_since")
-                else None,
-            }
-        )
-    pending = session.exec(select(Completion).where(Completion.status == "pending")).all()
-    names = {e["employee_id"]: e["full_name"] for e in employees}
-    return {
-        "employees": rows,
-        "total": len(rows),
-        "without_goal": sum(not e["career_goal"] for e in employees),
-        "gaps": sorted(
-            [{"name": k, "count": v} for k, v in totals.items()], key=lambda r: -r["count"]
-        )[:5],
-        "pending": [
-            {
-                **c.model_dump(),
-                "full_name": names[c.employee_id],
-                "title": events[c.event_id]["title"],
-            }
-            for c in pending
-        ],
-        "as_of": as_of,
-    }
+    return build_overview(account, session)
 
 
 @app.post("/api/hr/completions/{cid}/review")
@@ -493,7 +434,7 @@ async def import_data(
 async def ai_explanation(
     eid: str, account=Depends(current_account), session: Session = Depends(get_session)
 ):
-    employee = employee_document(eid, account, session).payload
+    employee = readable_employee(eid, account, session).payload
     if not settings.ai_enabled or not settings.openai_api_key:
         return {
             "mode": "rules",
@@ -521,6 +462,7 @@ async def ai_explanation(
                     "duration_hours",
                     "benefits",
                     "past_misses",
+                    "similar_misses",
                     "reason",
                 )
             }
@@ -529,7 +471,7 @@ async def ai_explanation(
     }
     # No employee names, IDs, source documents or private feedback are sent to the model.
     key = hashlib.sha256(
-        json.dumps([settings.openai_model, "v1", context], sort_keys=True).encode()
+        json.dumps([settings.openai_model, "v2", context], sort_keys=True).encode()
     ).hexdigest()
     cached = session.get(AICache, key)
     if cached:

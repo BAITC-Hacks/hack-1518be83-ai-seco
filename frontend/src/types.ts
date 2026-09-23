@@ -1,6 +1,6 @@
 export type User = {
   username: string;
-  role: "employee" | "hr";
+  role: "employee" | "hr" | "manager";
   employee_id: string | null;
 };
 export type Goal = { target_role: string; target_grade: string };
@@ -35,6 +35,7 @@ export type Quest = {
   next_session: string | null;
   reason: string;
   past_misses: number;
+  similar_misses?: number;
   benefits: {
     name: string;
     from: number;
@@ -51,6 +52,10 @@ export type History = {
   title: string;
   status: string;
   format: string;
+  mandatory: boolean;
+  due_date?: string | null;
+  completion_pct: number;
+  duration_hours: number;
 };
 export type Completion = {
   id: string;
@@ -75,6 +80,17 @@ export type Profile = {
   as_of: string;
   grade_since: string | null;
   grade_months: number | null;
+  grade_record: {
+    grade_since: string | null;
+    revision: number;
+    history: {
+      grade_since: string;
+      note: string;
+      reviewer: string;
+      recorded_at: string;
+    }[];
+  };
+  development_plan: DevelopmentPlan | null;
   onboarding: {
     status: "pending_assessment" | "assessed";
     specialization: string;
@@ -101,6 +117,7 @@ export type Catalog = {
 export type HRRow = {
   employee_id: string;
   full_name: string;
+  department: string;
   role: string;
   grade: string;
   readiness: number | null;
@@ -108,6 +125,11 @@ export type HRRow = {
   goal: Goal | null;
   grade_since: string | null;
   grade_months: number | null;
+  priority: "high" | "medium" | "planned";
+  critical_gaps: number;
+  paused: boolean;
+  mandatory_overdue: number;
+  plan: DevelopmentPlan | null;
 };
 export type Overview = {
   total: number;
@@ -115,6 +137,26 @@ export type Overview = {
   employees: HRRow[];
   pending: Completion[];
   gaps: { name: string; count: number }[];
+  department: string | null;
+  departments: string[];
+  as_of: string;
+  priorities: Record<"high" | "medium" | "planned", number>;
+  policy: SupportPolicy;
+  hr_owners: string[];
+};
+export type SupportPolicy = {
+  inactivity_days: number;
+  grade_months: number;
+  misses: number;
+};
+export type DevelopmentPlan = {
+  status: "discussion" | "active" | "paused" | "closed";
+  owner: string;
+  next_review_on: string | null;
+  note: string;
+  revision: number;
+  updated_by: string;
+  updated_at: string;
 };
 export type EvidenceItem = {
   artifact_id: string;

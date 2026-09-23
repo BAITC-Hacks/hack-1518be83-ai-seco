@@ -1,6 +1,8 @@
 import copy
 
 import pytest
+from app import ai
+from app.config import settings
 from app.db import get_session
 from app.main import app
 from app.models import Account, Document
@@ -8,6 +10,19 @@ from app.security import password_hash
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
+
+
+@pytest.fixture(autouse=True)
+def isolate_ai_provider(monkeypatch):
+    """Local .env credentials must never turn ordinary tests into paid API calls."""
+    monkeypatch.setattr(settings, "ai_enabled", False)
+    monkeypatch.setattr(settings, "openai_api_key", "")
+
+    async def unexpected_provider(*args, **kwargs):
+        pytest.fail("AI provider must be explicitly mocked in automated tests")
+
+    monkeypatch.setattr(ai, "explain", unexpected_provider)
+    monkeypatch.setattr(ai, "summarize_observations", unexpected_provider)
 
 
 @pytest.fixture

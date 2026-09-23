@@ -23,24 +23,22 @@ import {
   LogOut,
   Search,
   ShieldCheck,
-  Sparkles,
   Target,
   Users,
   X,
-  Clock3,
   Plus,
 } from "lucide-react";
 import { api, post } from "./api";
+import { AIRecommendations } from "./AIRecommendations";
+import {
+  DevelopmentPanel,
+  LearningPanel,
+  PolicyForm,
+  planLabels,
+} from "./Development";
 import { AssessmentForm, CreateEmployeeForm } from "./OnboardingForms";
 import { EvidenceHRPanel, WorkEvidencePanel } from "./WorkEvidence";
-import type {
-  Catalog,
-  Completion,
-  Overview,
-  Profile,
-  Quest,
-  User,
-} from "./types";
+import type { Catalog, Completion, Overview, Profile, User } from "./types";
 import "./style.css";
 
 const client = new QueryClient({
@@ -153,7 +151,8 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
     try {
       onLogin(
         await post<User>("/auth/login", {
-          username: role === "hr" ? "hr" : username,
+          username:
+            role === "hr" ? "hr" : role === "manager" ? "manager" : username,
           password,
         }),
       );
@@ -221,6 +220,15 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
               <strong>HR-партнёр</strong>
               <small>Развитие команды</small>
             </button>
+            <button
+              type="button"
+              className={role === "manager" ? "selected" : ""}
+              onClick={() => setRole("manager")}
+            >
+              <ShieldCheck />
+              <strong>Руководитель</strong>
+              <small>Мой отдел</small>
+            </button>
           </div>
           {role === "employee" && (
             <label>
@@ -259,8 +267,8 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
         <div className="privacy-note">
           <ShieldCheck size={20} />
           <span>
-            Личный профиль доступен сотруднику и HR. Никаких публичных
-            рейтингов.
+            Личный профиль доступен сотруднику, HR и руководителю в пределах его
+            отдела. Никаких публичных рейтингов.
           </span>
         </div>
         <small>
@@ -294,13 +302,15 @@ function App() {
         onLogin={(u) => {
           cache.removeQueries({ predicate: (q) => q.queryKey[0] !== "me" });
           cache.setQueryData(["me"], u);
-          setTab(u.role === "hr" ? "team" : "path");
+          setTab(u.role !== "employee" ? "team" : "path");
           setSelected(null);
         }}
       />
     );
   const isHR = user.role === "hr";
-  const eid = isHR ? selected : user.employee_id;
+  const isManager = user.role === "manager";
+  const isLead = isHR || isManager;
+  const eid = isLead ? selected : user.employee_id;
   async function logout() {
     await post("/auth/logout");
     cache.removeQueries({ predicate: (q) => q.queryKey[0] !== "me" });
@@ -315,7 +325,7 @@ function App() {
           className="brand"
           aria-label="Career Quest — главная"
           onClick={() => {
-            setTab(isHR ? "team" : "path");
+            setTab(isLead ? "team" : "path");
             setSelected(null);
           }}
         >
@@ -334,14 +344,15 @@ function App() {
         </div>
         <span className="nav-label">МОЁ ПРОСТРАНСТВО</span>
         <nav>
-          {(isHR
+          {(isLead
             ? [
-                ["team", Users, "Команда"],
+                ["team", Users, isHR ? "Команда" : "Мой отдел"],
                 ["connections", Link2, "Интеграции"],
               ]
             : [
                 ["path", Compass, "Мой карьерный путь"],
                 ["skills", LayoutDashboard, "Мои навыки"],
+                ["learning", GraduationCap, "Моё обучение"],
                 ["history", BookOpen, "История развития"],
                 ["evidence", GitPullRequest, "Рабочие примеры"],
                 ["connections", Link2, "Интеграции"],
@@ -379,7 +390,13 @@ function App() {
               {isHR ? "HR" : user.username.slice(0, 2).toUpperCase()}
             </span>
             <span>
-              <strong>{isHR ? "HR-партнёр" : "Мой кабинет"}</strong>
+              <strong>
+                {isHR
+                  ? "HR-партнёр"
+                  : isManager
+                    ? "Руководитель"
+                    : "Мой кабинет"}
+              </strong>
               <small>{user.username}</small>
             </span>
             <LogOut size={17} />
@@ -390,7 +407,9 @@ function App() {
         <header className="topbar">
           <div>
             Пространство развития <ChevronRight size={14} />{" "}
-            <strong>{isHR ? "HR-обзор" : "Мой путь"}</strong>
+            <strong>
+              {isHR ? "HR-обзор" : isManager ? "Обзор отдела" : "Мой путь"}
+            </strong>
           </div>
           <div className="topbar-right">
             <span className="demo-dot" />
@@ -406,8 +425,9 @@ function App() {
           ) : catalog.data ? (
             tab === "connections" ? (
               <Connections />
-            ) : isHR && !selected ? (
+            ) : isLead && !selected ? (
               <HR
+                isHR={isHR}
                 catalog={catalog.data}
                 onSelect={(id) => {
                   setSelected(id);
@@ -419,8 +439,9 @@ function App() {
                 key={eid}
                 eid={eid}
                 catalog={catalog.data}
-                tab={isHR ? "path" : tab}
+                tab={isLead ? "path" : tab}
                 isHR={isHR}
+                isManager={isManager}
                 onBack={() => setSelected(null)}
               />
             ) : null
@@ -438,12 +459,14 @@ function ProfileView({
   catalog,
   tab,
   isHR,
+  isManager = false,
   onBack,
 }: {
   eid: string;
   catalog: Catalog;
   tab: string;
   isHR: boolean;
+  isManager?: boolean;
   onBack: () => void;
 }) {
   const cache = useQueryClient();
@@ -456,10 +479,7 @@ function ProfileView({
     [completion, setCompletion] = useState<{
       event_id: string;
       title: string;
-    } | null>(null),
-    [explanations, setExplanations] = useState<Record<string, string>>({}),
-    [aiMessage, setAIMessage] = useState(""),
-    [aiBusy, setAIBusy] = useState(false);
+    } | null>(null);
   if (query.isPending)
     return <div className="loading">Собираем ваш маршрут…</div>;
   if (query.isError) return <p className="error">{errorText(query.error)}</p>;
@@ -468,35 +488,13 @@ function ProfileView({
     goal = e.career_goal;
   const completed = p.history.filter((r) => r.status === "completed").length;
   const needsAssessment = p.onboarding?.status === "pending_assessment";
-  async function askAI() {
-    setAIBusy(true);
-    setAIMessage("");
-    try {
-      const r = await post<{
-        mode: string;
-        explanations: Record<string, string>;
-        message?: string;
-      }>(`/employees/${eid}/ai-explanation`);
-      setExplanations(r.explanations);
-      setAIMessage(
-        r.mode === "ai"
-          ? "AI-объяснение · проверьте факты перед выбором"
-          : (r.message ?? ""),
-      );
-    } catch (e) {
-      setAIMessage(errorText(e));
-    } finally {
-      setAIBusy(false);
-    }
-  }
   function refresh() {
-    setExplanations({});
     void cache.invalidateQueries({ queryKey: ["profile", eid] });
     void cache.invalidateQueries({ queryKey: ["hr"] });
   }
   return (
     <>
-      {isHR && (
+      {(isHR || isManager) && (
         <button className="text-button back" onClick={onBack}>
           ← К команде
         </button>
@@ -690,42 +688,13 @@ function ProfileView({
               icon={<Compass />}
             />
           </section>
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">ОТ ЦЕЛИ К ДЕЙСТВИЮ</span>
-              <h2>Рекомендовано для вашего роста</h2>
-              <p>Не просто курс — конкретный шаг к выбранной роли.</p>
-            </div>
-            <button
-              className="secondary"
-              onClick={askAI}
-              disabled={aiBusy || !p.recommendations.length}
-            >
-              <Sparkles size={16} />
-              {aiBusy
-                ? "AI объясняет…"
-                : catalog.ai_available
-                  ? "Объяснить с AI"
-                  : "Проверить AI-подключение"}
-            </button>
-          </div>
-          <div className="mode-note">
-            <span className="tiny-dot" />
-            {aiMessage ||
-              "Проверяемый подбор по правилам · AI-объяснение пока не запрошено"}
-          </div>
-          <div className="quest-grid">
-            {p.recommendations.map((q, i) => (
-              <QuestCard
-                key={q.event_id}
-                quest={q}
-                index={i}
-                explanation={explanations[q.event_id]}
-                onComplete={() => setCompletion(q)}
-                canComplete={q.format === "self_paced"}
-              />
-            ))}
-          </div>
+          <AIRecommendations
+            key={JSON.stringify([eid, e.career_goal, p.recommendations])}
+            eid={eid}
+            quests={p.recommendations}
+            available={catalog.ai_available}
+            onComplete={isManager ? undefined : (q) => setCompletion(q)}
+          />
           {!p.recommendations.length && (
             <div className="empty">
               {needsAssessment
@@ -799,6 +768,12 @@ function ProfileView({
           )}
         </section>
       )}
+      {tab === "path" && (
+        <DevelopmentPanel profile={p} editable={isHR} onSaved={refresh} />
+      )}
+      {tab === "learning" && !isManager && (
+        <LearningPanel profile={p} onComplete={setCompletion} />
+      )}
       {(tab === "evidence" || (isHR && tab === "path")) && (
         <WorkEvidencePanel eid={eid} isHR={isHR} onChanged={refresh} />
       )}
@@ -841,7 +816,7 @@ function ProfileView({
                 </small>
               </div>
               <span className={`status ${h.status}`}>{statuses[h.status]}</span>
-              {h.status === "in_progress" && (
+              {h.status === "in_progress" && !isManager && (
                 <button
                   className="text-button"
                   onClick={() => setCompletion(h)}
@@ -940,81 +915,6 @@ function Skills({ gaps }: { gaps: Profile["gaps"] }) {
     </div>
   );
 }
-function QuestCard({
-  quest: q,
-  index,
-  explanation,
-  onComplete,
-  canComplete,
-}: {
-  quest: Quest;
-  index: number;
-  explanation?: string;
-  onComplete: () => void;
-  canComplete: boolean;
-}) {
-  return (
-    <article className="quest-card">
-      <div className="quest-top">
-        <span className="quest-number">0{index + 1}</span>
-        <span className="badge">
-          {q.benefits.some((b) => b.critical)
-            ? "Ключевой навык"
-            : "Развитие навыков"}
-        </span>
-      </div>
-      <h3>{q.title}</h3>
-      <div className="quest-meta">
-        <span>
-          <Clock3 size={14} />
-          {q.duration_hours} ч
-        </span>
-        <span>{formats[q.format]}</span>
-      </div>
-      <p>{explanation || q.reason}</p>
-      <div className="benefits">
-        {q.benefits.slice(0, 3).map((b) => (
-          <span
-            key={b.name}
-            title={
-              b.evidence
-                ? "Зона развития подтверждена экспертом по рабочим примерам"
-                : undefined
-            }
-          >
-            {b.name}
-            {b.evidence && " ✓"}
-            <strong>
-              {b.from} → {b.to}
-            </strong>
-          </span>
-        ))}
-      </div>
-      {q.past_misses > 0 && (
-        <small className="history-hint">
-          В истории есть {q.past_misses} незавершённых участий/отказов за 180
-          дней. Стоит обсудить формат.
-        </small>
-      )}
-      <footer>
-        <small>
-          {q.next_session
-            ? `Ближайшая сессия: ${dateText(q.next_session)}`
-            : "Можно учиться в своём темпе"}
-        </small>
-        <button
-          className="card-button"
-          onClick={onComplete}
-          disabled={!canComplete}
-        >
-          {canComplete ? "Сообщить о завершении" : "Завершение после сессии"}
-          <ArrowRight size={16} />
-        </button>
-      </footer>
-    </article>
-  );
-}
-
 function GoalModal({
   profile: p,
   catalog,
@@ -1155,19 +1055,25 @@ function CompletionModal({
 }
 
 function HR({
+  isHR,
   catalog,
   onSelect,
 }: {
+  isHR: boolean;
   catalog: Catalog;
   onSelect: (id: string) => void;
 }) {
   const cache = useQueryClient(),
     q = useQuery({
-      queryKey: ["hr"],
-      queryFn: () => api<Overview>("/hr/overview"),
+      queryKey: ["hr", isHR],
+      queryFn: () => api<Overview>("/team/overview"),
     });
   const [search, setSearch] = useState(""),
     [filter, setFilter] = useState("Все роли"),
+    [department, setDepartment] = useState("all"),
+    [priority, setPriority] = useState("all"),
+    [page, setPage] = useState(0),
+    [policyOpen, setPolicyOpen] = useState(false),
     [importOpen, setImportOpen] = useState(false),
     [createOpen, setCreateOpen] = useState(false),
     [review, setReview] = useState<Completion | null>(null);
@@ -1182,28 +1088,41 @@ function HR({
     rows = d.employees.filter(
       (e) =>
         (filter === "Все роли" || filter === e.role) &&
+        (department === "all" || department === e.department) &&
+        (priority === "all" || priority === e.priority) &&
         `${e.full_name} ${e.role} ${e.employee_id}`
           .toLowerCase()
           .includes(search.toLowerCase()),
     );
+  const pages = Math.max(1, Math.ceil(rows.length / 10));
+  const currentPage = Math.min(page, pages - 1);
   return (
     <>
       <div className="page-title">
         <div>
           <span className="eyebrow">ЛЮДИ И ВОЗМОЖНОСТИ</span>
-          <h1>Развитие команды</h1>
-          <p>Помогайте двигаться вперёд — без ярлыков и публичных рейтингов.</p>
+          <h1>{isHR ? "Развитие команды" : "Мой отдел"}</h1>
+          <p>
+            {isHR
+              ? "Помогайте двигаться вперёд — без ярлыков и публичных рейтингов."
+              : `${d.department} · Сервер ограничивает доступ вашим отделом. Изменения целей и оценки — у HR.`}
+          </p>
         </div>
-        <div className="button-group">
-          <button className="secondary" onClick={() => setImportOpen(true)}>
-            <ArrowDownToLine size={16} />
-            Импорт
-          </button>
-          <button className="primary" onClick={() => setCreateOpen(true)}>
-            <Plus size={16} />
-            Сотрудник
-          </button>
-        </div>
+        {isHR && (
+          <div className="button-group">
+            <button className="secondary" onClick={() => setPolicyOpen(true)}>
+              Настроить сигналы
+            </button>
+            <button className="secondary" onClick={() => setImportOpen(true)}>
+              <ArrowDownToLine size={16} />
+              Импорт
+            </button>
+            <button className="primary" onClick={() => setCreateOpen(true)}>
+              <Plus size={16} />
+              Сотрудник
+            </button>
+          </div>
+        )}
       </div>
       <section className="stats-grid">
         <Stat
@@ -1219,9 +1138,9 @@ function HR({
           icon={<Compass />}
         />
         <Stat
-          label="Ожидают проверки"
-          value={String(d.pending.length)}
-          note="заявок о завершении"
+          label={isHR ? "Ожидают проверки" : "С назначенной целью"}
+          value={String(isHR ? d.pending.length : d.total - d.without_goal)}
+          note={isHR ? "заявок о завершении" : "сотрудников вашего отдела"}
           icon={<ShieldCheck />}
         />
       </section>
@@ -1246,6 +1165,30 @@ function HR({
           ))}
         </section>
       )}
+      <section className="priority-grid" aria-label="Очередь поддержки">
+        {(["high", "medium", "planned"] as const).map((key) => (
+          <button
+            key={key}
+            className={`priority-tile ${key} ${priority === key ? "selected" : ""}`}
+            aria-pressed={priority === key}
+            onClick={() => {
+              setPriority(priority === key ? "all" : key);
+              setPage(0);
+            }}
+          >
+            <span>
+              {{ high: "Высокий", medium: "Средний", planned: "Плановый" }[key]}{" "}
+              приоритет помощи
+            </span>
+            <strong>{d.priorities[key]}</strong>
+            <small>Показать сотрудников →</small>
+          </button>
+        ))}
+      </section>
+      <p className="muted">
+        Приоритет — очередь помощи, не рейтинг людей. Паузы и причины
+        обсуждаются с сотрудником.
+      </p>
       <div className="hr-grid">
         <section className="panel">
           <h2>Частые разрывы до целей</h2>
@@ -1256,7 +1199,11 @@ function HR({
             <div className="aggregate" key={g.name}>
               <span>{g.name}</span>
               <div>
-                <i style={{ width: `${(g.count / d.total) * 100}%` }} />
+                <i
+                  style={{
+                    width: `${d.total ? (g.count / d.total) * 100 : 0}%`,
+                  }}
+                />
               </div>
               <strong>{g.count}</strong>
             </div>
@@ -1275,7 +1222,7 @@ function HR({
           </small>
         </section>
       </div>
-      <EvidenceHRPanel onSelect={onSelect} />
+      {isHR && <EvidenceHRPanel onSelect={onSelect} />}
       <section className="panel table-panel">
         <div className="panel-title">
           <h2>
@@ -1288,13 +1235,47 @@ function HR({
                 aria-label="Поиск сотрудников"
                 placeholder="Имя, роль или ID"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(0);
+                }}
               />
             </label>
+            {isHR && (
+              <select
+                aria-label="Фильтр по отделу"
+                value={department}
+                onChange={(e) => {
+                  setDepartment(e.target.value);
+                  setPage(0);
+                }}
+              >
+                <option value="all">Все отделы</option>
+                {d.departments.map((name) => (
+                  <option key={name}>{name}</option>
+                ))}
+              </select>
+            )}
+            <select
+              aria-label="Приоритет помощи"
+              value={priority}
+              onChange={(e) => {
+                setPriority(e.target.value);
+                setPage(0);
+              }}
+            >
+              <option value="all">Все приоритеты</option>
+              <option value="high">Высокий</option>
+              <option value="medium">Средний</option>
+              <option value="planned">Плановый</option>
+            </select>
             <select
               aria-label="Фильтр по роли"
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+              onChange={(e) => {
+                setFilter(e.target.value);
+                setPage(0);
+              }}
             >
               <option>Все роли</option>
               {[...new Set(d.employees.map((e) => e.role))].map((r) => (
@@ -1315,11 +1296,13 @@ function HR({
               </tr>
             </thead>
             <tbody>
-              {rows.map((e) => (
+              {rows.slice(currentPage * 10, currentPage * 10 + 10).map((e) => (
                 <tr key={e.employee_id}>
                   <td>
                     <strong>{e.full_name}</strong>
-                    <small>{e.employee_id}</small>
+                    <small>
+                      {e.employee_id} · {e.department}
+                    </small>
                   </td>
                   <td>
                     {e.role}
@@ -1334,6 +1317,30 @@ function HR({
                       : "Не выбрана"}
                   </td>
                   <td>
+                    <span className={`priority-badge ${e.priority}`}>
+                      {
+                        {
+                          high: "Высокий",
+                          medium: "Средний",
+                          planned: "Плановый",
+                        }[e.priority]
+                      }{" "}
+                      приоритет
+                    </span>
+                    {e.plan && (
+                      <small>
+                        {planLabels[e.plan.status]} · {e.plan.owner}
+                        {e.plan.next_review_on
+                          ? ` · ${dateText(e.plan.next_review_on)}`
+                          : ""}
+                      </small>
+                    )}
+                    {!!e.mandatory_overdue && (
+                      <small>
+                        Обязательных назначений с истёкшим сроком:{" "}
+                        {e.mandatory_overdue} (отдельный процесс)
+                      </small>
+                    )}
                     {e.signals.length ? (
                       e.signals.map((s) => (
                         <span className="signal" key={s}>
@@ -1360,11 +1367,44 @@ function HR({
             </tbody>
           </table>
         </div>
+        <div className="pagination">
+          <button
+            className="secondary"
+            disabled={currentPage === 0}
+            onClick={() => setPage(currentPage - 1)}
+          >
+            Назад
+          </button>
+          <span>
+            Страница {currentPage + 1} из {pages} · {rows.length} сотрудников
+          </span>
+          <button
+            className="secondary"
+            disabled={currentPage + 1 >= pages}
+            onClick={() => setPage(currentPage + 1)}
+          >
+            Далее
+          </button>
+        </div>
         {!rows.length && (
           <div className="empty">По вашему запросу никто не найден.</div>
         )}
       </section>
-      {importOpen && (
+      {policyOpen && isHR && (
+        <Modal
+          title="Настройки сигналов поддержки"
+          close={() => setPolicyOpen(false)}
+        >
+          <PolicyForm
+            policy={d.policy}
+            onSaved={() => {
+              setPolicyOpen(false);
+              refresh();
+            }}
+          />
+        </Modal>
+      )}
+      {importOpen && isHR && (
         <ImportModal close={() => setImportOpen(false)} saved={refresh} />
       )}{" "}
       {createOpen && (
