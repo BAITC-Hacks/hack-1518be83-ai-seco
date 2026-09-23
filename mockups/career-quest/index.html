@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#102333" />
+    <meta name="description" content="Предварительная рабочая страница Career Quest на данных хакатона HackAlem AI." />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23102333'/%3E%3Cpath d='M15 42 27 26l9 8 13-17' fill='none' stroke='%2339c7aa' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='49' cy='17' r='5' fill='%23e9b766'/%3E%3C/svg%3E" />
+    <title>Career Quest — сводка для HR</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./overrides.css" />
+    <link rel="stylesheet" href="./dashboard.css" />
+    <link rel="stylesheet" href="./roles.css" />
+    <script src="./mock-integrations.js" defer></script>
+    <script src="./dashboard.js" defer></script>
+    <script src="./roles.js" defer></script>
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-mark">CQ</span><span>Career <strong>Quest</strong><small>Развитие сотрудников</small></span></div>
+        <div class="demo-role-switch"><label for="workspace-role">ДЕМО-КАБИНЕТ</label><select id="workspace-role"><option value="hr">HR</option><option value="employee">Сотрудник</option><option value="manager">Руководитель отдела</option></select><label id="actor-label" for="demo-actor" hidden>Демо-профиль</label><select id="demo-actor" hidden></select><p>Переключение для презентации, не авторизация.</p></div>
+        <nav class="nav" aria-label="Разделы">
+          <button class="nav-item active" data-view="hr"><span class="nav-symbol">▦</span> Общая сводка</button>
+          <button class="nav-item" data-view="people"><span class="nav-symbol">☷</span> Сотрудники</button>
+          <button class="nav-item" data-view="employee"><span class="nav-symbol">◈</span> Мой маршрут</button>
+          <button class="nav-item" data-view="learning"><span class="nav-symbol">▤</span> Моё обучение</button>
+          <button class="nav-item" data-view="integrations"><span class="nav-symbol">⇄</span> Подключения</button>
+        </nav>
+        <div class="sidebar-note"><span class="note-dot"></span><span>Демонстрация на синтетических данных<br><b>Срез: 01.10.2026</b></span></div>
+      </aside>
+
+      <div class="main-column">
+        <header class="topbar">
+          <div><span class="eyebrow">HACKALEM AI · HALYK BANK</span><h1 id="page-title">Сводка по всем сотрудникам</h1></div>
+          <div class="topbar-actions"><span class="data-pill">● Данные загружены из стартового набора</span><span class="avatar">CQ</span></div>
+        </header>
+
+        <main>
+          <div id="loading" class="loading">Загружаем профили, навыки и историю…</div>
+          <div id="error" class="error" hidden></div>
+          <div id="role-scope" class="role-scope" hidden></div>
+          <div id="team-filters" class="filter-group team-filters" hidden><label id="department-filter" class="field"><span>Отдел</span><select id="department-select"><option value="all">Все отделы</option></select></label><label class="field"><span>Специализация</span><select id="role-select"><option value="all">Все роли</option></select></label><p id="team-scope-hint"></p></div>
+
+          <section id="employee-view" hidden>
+            <div class="section-head"><div><p class="section-kicker">МОЙ КАБИНЕТ</p><h2>Мой путь к следующему грейду</h2></div><select id="employee-select" hidden aria-label="Текущий сотрудник"></select></div>
+            <div id="personal-rating" class="personal-rating"></div>
+            <div class="overview-grid">
+              <article class="profile-card panel"><div class="person-top"><div id="person-initials" class="person-initials">AI</div><div><h3 id="person-name">—</h3><p id="person-role">—</p></div></div><div class="profile-meta"><div><span>Отдел</span><b id="person-dept">—</b></div><div><span>Формат работы</span><b id="person-format">—</b></div><div><span>Оценка навыков</span><b id="person-review">—</b></div></div><div class="goal-row"><span>Текущий грейд <b id="current-grade">—</b></span><span class="goal-arrow">→</span><span><span id="goal-label">Цель</span> <b id="target-grade">—</b></span></div></article>
+              <article class="progress-card panel"><div class="panel-head"><div><p class="section-kicker">ГОТОВНОСТЬ К ЦЕЛИ</p><h3>Требования следующего грейда</h3></div><span id="readiness-value" class="readiness-value">—</span></div><div class="progress-track"><div id="readiness-bar" class="progress-fill"></div></div><p id="readiness-description" class="muted">—</p><div class="metrics"><div><strong id="skill-count">—</strong><span>навыков в профиле</span></div><div><strong id="gap-count">—</strong><span>разрывов до цели</span></div><div><strong id="critical-count">—</strong><span>критичных разрывов</span></div></div></article>
+            </div>
+
+            <div class="content-grid">
+              <div class="primary-stack">
+                <section class="panel recommendations"><div class="panel-head"><div><p class="section-kicker">СЛЕДУЮЩИЙ ШАГ</p><h3>Рекомендации для развития</h3></div><span class="method-chip">Роль + навыки + история</span></div><p class="section-caption">Показаны доступные добровольные активности, которые закрывают разрывы до цели.</p><div id="critical-notice" class="critical-notice" hidden></div><div id="recommendation-list" class="recommendation-list"></div></section>
+                <section class="panel history-panel"><div class="panel-head"><div><p class="section-kicker">ФАКТИЧЕСКАЯ АКТИВНОСТЬ</p><h3>История участия</h3></div><span id="history-total" class="muted"></span></div><div id="history-stats" class="history-stats"></div><div id="history-list" class="history-list"></div></section>
+              </div>
+              <div class="secondary-stack"><section class="panel skills-panel"><div class="panel-head"><div><p class="section-kicker">НАВЫКИ</p><h3>Разрывы до цели</h3></div></div><p class="section-caption">Уровни учитывают завершённые после последней оценки мероприятия.</p><div id="skill-list" class="skill-list"></div></section><section class="panel explain-panel"><p class="section-kicker">КАК ЭТО РАБОТАЕТ</p><h3>Решение можно проверить</h3><p>Для каждого занятия мы сначала проверяем роль, грейд, предпосылки и историю. Затем считаем реальный прирост по правилам <b>gain</b> и <b>max_level</b>.</p><p>Обязательные задания показаны в истории, но не выдаются за персональные рекомендации.</p></section></div>
+            </div>
+            <section class="panel grade-panel"><div class="panel-head"><div><p class="section-kicker">ПОНЯТНЫЕ УСЛОВИЯ РОСТА</p><h3 id="grade-heading">Что нужно для следующего грейда</h3></div></div><p id="grade-note" class="section-caption"></p><div id="grade-checklist"></div></section>
+          </section>
+
+          <section id="learning-view" hidden><div class="section-head"><div><p class="section-kicker">МОЁ ОБУЧЕНИЕ</p><h2>Пройдено, в работе и впереди</h2><p class="section-caption">История и назначения из датасета, без вымышленных результатов обучения.</p></div></div><div id="learning-metrics" class="hr-metrics"></div><section class="panel learning-panel"><h3>Нужно завершить</h3><p class="section-caption">Обязательные занятия с незавершённой последней записью и обучение в процессе. Рекомендации по развитию не считаются обязательными.</p><div id="required-learning"></div></section><section class="panel learning-panel"><h3>Рекомендовано для моей цели</h3><div id="suggested-learning"></div></section><section class="panel learning-panel"><h3>Уже пройдено</h3><div id="completed-learning"></div></section></section>
+
+          <section id="hr-view" hidden>
+            <div class="section-head"><div><p class="section-kicker">АНАЛИТИКА РАЗВИТИЯ</p><h2 id="analytics-heading">Где сотрудникам нужна поддержка</h2><p class="section-caption no-margin">Профили и обучение — из датасета. GitHub, Jira и ИИ-выводы — демо.</p></div><button class="primary-button" data-go="people">Открыть список сотрудников →</button></div>
+            <div id="hr-metrics" class="hr-metrics"></div>
+            <div class="source-strip"><div><b>Рабочий контекст команды</b><p id="source-coverage"></p></div><span class="muted">Подключениями управляют сами сотрудники</span></div>
+            <div id="support-overview" class="support-overview"></div>
+            <div class="hr-grid"><section class="panel"><div class="panel-head"><div><p class="section-kicker">ДАННЫЕ ХАКАТОНА</p><h3>Самые частые разрывы в навыках</h3></div></div><p class="section-caption">Число сотрудников ниже требований целевого профиля. Если цель не задана — следующий грейд, для Lead — текущий.</p><div id="hr-gaps" class="hr-gaps"></div></section><section class="panel"><div class="panel-head"><div><p class="section-kicker">ОБУЧЕНИЕ</p><h3>Итоги участия</h3></div></div><p class="section-caption">01.10.2024–30.09.2026 · реальные записи датасета.</p><div id="hr-activity" class="hr-activity"></div></section></div>
+            <section class="panel insights-panel"><div class="panel-head"><div><p class="section-kicker">GITHUB + JIRA → КОНТЕКСТ ДЛЯ HR</p><h3>Что стоит обсудить с сотрудниками <span class="demo-tag">МОК</span></h3></div><span id="insight-count" class="muted"></span></div><p class="section-caption">Демонстрация ИИ-анализа: замечания к работе сопоставляются с матрицей навыков. Выводы созданы по шаблонам, без вызова ИИ. Уровни навыков не меняются.</p><div id="insights-list" class="insights-grid"></div><button id="show-insights" class="text-button" hidden>Показать все сигналы</button></section>
+          </section>
+          <section id="people-view" hidden>
+            <div class="section-head"><div><p class="section-kicker">ПОДДЕРЖКА СОТРУДНИКОВ</p><h2 id="people-heading">Все сотрудники</h2><p class="section-caption">Сначала те, кому может понадобиться помощь. Это очередь поддержки, не рейтинг эффективности.</p></div></div>
+            <details class="priority-method"><summary>Как определяется приоритет помощи</summary><p>Высокий: есть незавершённое просроченное обязательное обучение, либо минимум два ключевых навыка отстают на два уровня. Средний: есть ключевой разрыв, обязательное обучение к завершению или готовность к цели ниже 70%. Плановый: остальные случаи. Это демонстрационные правила, которые HR сможет согласовать с командой. GitHub/Jira не влияют на очередь, отсутствие подключения не снижает оценку.</p><p>Внутри группы: сначала незавершённые просроченные обязательные занятия, затем величина разрыва ключевых навыков; при равенстве — по имени.</p></details>
+            <div id="priority-filters" class="priority-filters" aria-label="Приоритет помощи"></div>
+            <section class="panel employees-panel"><div class="panel-head"><h3>Сотрудники <span id="employee-table-count" class="muted"></span></h3><label class="field search-field"><span>Поиск по имени или ID</span><input id="employee-search" type="search" placeholder="Имя или E0028" /></label></div><div class="table-scroll"><table class="employee-table"><thead><tr><th>Сотрудник</th><th>Приоритет помощи</th><th>До цели</th><th>Разрывы</th><th>Источники · демо</th><th>Карточка</th></tr></thead><tbody id="employee-table-body"></tbody></table></div><div class="pagination"><span id="page-summary"></span><div><button id="previous-page" class="secondary-button" aria-label="Предыдущая страница">←</button><button id="next-page" class="secondary-button" aria-label="Следующая страница">→</button></div></div></section>
+          </section>
+
+          <section id="integrations-view" hidden>
+            <div class="section-head"><div><p class="section-kicker">МОИ ПОДКЛЮЧЕНИЯ · ДЕМО</p><h2>Мои рабочие инструменты</h2><p id="integration-owner" class="section-caption"></p></div><select id="integration-employee" hidden aria-label="Владелец подключений"></select></div>
+            <div class="demo-notice"><b>Демонстрационные подключения</b><p>Вместо авторизации загружаются вымышленные PR, комментарии и задачи. Пароли и токены не нужны, запросов в GitHub/Jira нет. Изменения действуют до перезагрузки страницы.</p></div>
+            <div id="integration-cards" class="integration-grid"></div>
+            <section class="panel privacy-panel"><h3>Что увидит HR</h3><div class="privacy-grid"><div><b>01 · Контекст работы</b><p>Только выбранные репозитории и проекты: изменения, замечания ревью, описания и обсуждения задач.</p></div><div><b>02 · Проверяемые гипотезы</b><p>Источник → навык → расхождение с целью → рекомендация. Мало данных — значит, нельзя сделать вывод.</p></div><div><b>03 · Решение человека</b><p>Отсутствие активности не означает отсутствие навыка. Нет рейтинга сотрудников и автоматических кадровых решений.</p></div></div><p class="muted">В рабочей версии понадобятся вход сотрудника, его согласие, права HR и безопасная авторизация GitHub/Jira. Здесь переключатель кабинета — только для демонстрации.</p></section>
+          </section>
+        </main>
+      </div>
+    </div>
+    <dialog id="detail-dialog" aria-labelledby="detail-title"><div class="dialog-header"><h2 id="detail-title"></h2><button class="icon-button" data-close="detail-dialog" aria-label="Закрыть подробности">×</button></div><div id="detail-content"></div></dialog>
+    <dialog id="connect-dialog" aria-labelledby="connect-title"><div class="dialog-header"><h2 id="connect-title"></h2><button class="icon-button" data-close="connect-dialog" aria-label="Закрыть подключение">×</button></div><form id="connect-form"><p class="demo-notice">Это имитация подключения. Реальные аккаунты не используются.</p><p id="connect-person"></p><fieldset><legend>Какие демо-данные разрешить анализировать</legend><div id="resource-choices"></div></fieldset><label class="consent"><input id="connect-consent" type="checkbox" required /> Разрешаю показывать демонстрационный анализ этих источников в окне HR.</label><button class="primary-button" type="submit">Подключить демо-данные</button></form></dialog>
+    <div id="toast" role="status" hidden></div>
+  </body>
+</html>
