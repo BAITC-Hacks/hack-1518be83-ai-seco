@@ -472,12 +472,20 @@ async def ai_explanation(
         ],
     }
     # No employee names, IDs, source documents or private feedback are sent to the model.
+    result = await guarded_ai(session, "v2", context, ai.explain)
+    if "error" in result:
+        return {"mode": "rules", "message": result["error"], "explanations": {}}
+    return {"mode": "ai", "explanations": result["payload"], "cached": result["cached"]}
+
+
+async def guarded_ai(session, version, context, call):
+    """Shared cache, daily call budget and failure handling for model calls."""
     key = hashlib.sha256(
-        json.dumps([settings.openai_model, "v2", context], sort_keys=True).encode()
+        json.dumps([settings.openai_model, version, context], sort_keys=True).encode()
     ).hexdigest()
     cached = session.get(AICache, key)
     if cached:
-        return {"mode": "ai", "explanations": cached.payload, "cached": True}
+        return {"payload": cached.payload, "cached": True}
     day = datetime.now(UTC).date().isoformat()
     if not session.get(AIBudget, day):
         try:
@@ -492,22 +500,85 @@ async def ai_explanation(
     )
     session.commit()
     if updated.rowcount != 1:
-        return {
-            "mode": "rules",
-            "message": "Дневной лимит AI-запросов исчерпан",
-            "explanations": {},
-        }
+        return {"error": "Дневной лимит AI-запросов исчерпан"}
     try:
-        explanations = await ai.explain(context)
+        payload = await call(context)
     except Exception:
         return {
-            "mode": "rules",
-            "message": "AI не ответил корректно за отведённое время. Сохранён подбор по правилам.",
-            "explanations": {},
+            "error": "AI не ответил корректно за отведённое время. Сохранён подбор по правилам."
         }
-    session.merge(AICache(id=key, payload=explanations))
+    session.merge(AICache(id=key, payload=payload))
     session.commit()
-    return {"mode": "ai", "explanations": explanations, "cached": False}
+    return {"payload": payload, "cached": False}
+
+
+PRIORITY_NAMES = {"high": "высокий", "medium": "средний", "planned": "плановый"}
+
+
+def briefing_context(employee, data, row, focus_names):
+    """Facts for the conversation guide. No name, ID, department or free-text notes."""
+    return {
+        "today": data["as_of"],
+        "role": employee["role"],
+        "grade": employee["grade"],
+        "goal_set_by_hr": employee.get("career_goal"),
+        "readiness_to_goal_percent": data["readiness"],
+        "gaps": [
+            {k: g[k] for k in ("name", "current", "required", "critical")}
+            for g in data["gaps"]
+            if g["gap"] > 0 and g["assessed"]
+        ][:8],
+        "support": {
+            "priority": PRIORITY_NAMES[row["priority"]],
+            "signals": row["signals"],
+            "plan_status": (row["plan"] or {}).get("status"),
+            "paused": row["paused"],
+            "mandatory_overdue": row["mandatory_overdue"],
+        },
+        "growth": {
+            "score_points_of_100": row["growth"]["score"],
+            "ready_for_promotion_talk": row["growth"]["ready"],
+        }
+        if row["growth"]
+        else None,
+        "no_step": row["no_step"]["text"] if row["no_step"] else None,
+        "confirmed_development_areas": sorted(focus_names),
+        "recommendations": [
+            {
+                k: r[k]
+                for k in (
+                    "event_id",
+                    "title",
+                    "format",
+                    "duration_hours",
+                    "next_session",
+                    "benefits",
+                )
+            }
+            for r in data["recommendations"]
+        ],
+    }
+
+
+@app.post("/api/team/employees/{eid}/ai-briefing")
+async def ai_briefing(
+    eid: str, account=Depends(current_account), session: Session = Depends(get_session)
+):
+    if account.role not in {"hr", "manager"}:
+        raise HTTPException(403, "Разбор для разговора доступен HR и руководителю")
+    employee = readable_employee(eid, account, session).payload
+    if not settings.ai_enabled or not settings.openai_api_key:
+        return {"mode": "rules", "message": "AI не подключён. Используйте сигналы и план выше."}
+    data = profile_data(employee, session)
+    row = next(r for r in build_overview(account, session)["employees"] if r["employee_id"] == eid)
+    names = {s["skill_id"]: s["name"] for s in bundle(session)[0]["skills"]}
+    focus = {names.get(s, s) for s in confirmed_focus(session, eid)}
+    result = await guarded_ai(
+        session, "brief-v1", briefing_context(employee, data, row, focus), ai.brief
+    )
+    if "error" in result:
+        return {"mode": "rules", "message": result["error"]}
+    return {"mode": "ai", "briefing": result["payload"], "cached": result["cached"]}
 
 
 if settings.frontend_dir.is_dir():

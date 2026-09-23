@@ -39,6 +39,7 @@ import {
 import { Integrations } from "./Integrations";
 import { AssessmentForm, CreateEmployeeForm } from "./OnboardingForms";
 import { EvidenceHRPanel, WorkEvidencePanel } from "./WorkEvidence";
+import { ActivitiesPanel, AIBriefing, NoStepPanel } from "./HRInsights";
 import type { Catalog, Completion, Overview, Profile, User } from "./types";
 import "./style.css";
 
@@ -773,6 +774,13 @@ function ProfileView({
           )}
         </section>
       )}
+      {tab === "path" && (isHR || isManager) && (
+        <AIBriefing
+          eid={eid}
+          quests={p.recommendations}
+          available={catalog.ai_available}
+        />
+      )}
       {tab === "path" && (
         <DevelopmentPanel profile={p} editable={isHR} onSaved={refresh} />
       )}
@@ -1094,7 +1102,10 @@ function HR({
       (e) =>
         (filter === "Все роли" || filter === e.role) &&
         (department === "all" || department === e.department) &&
-        (priority === "all" || priority === e.priority) &&
+        (priority === "all" ||
+          priority === e.priority ||
+          (priority === "growth" && !!e.growth?.ready) ||
+          (priority === "no_step" && !!e.no_step)) &&
         `${e.full_name} ${e.role} ${e.employee_id}`
           .toLowerCase()
           .includes(search.toLowerCase()),
@@ -1189,6 +1200,31 @@ function HR({
             <small>Показать сотрудников →</small>
           </button>
         ))}
+        {(
+          [
+            ["growth", "Готовы к росту", d.growth_ready, "Обсудить переход →"],
+            [
+              "no_step",
+              "Без рекомендованного шага",
+              d.no_step,
+              "Показать причины →",
+            ],
+          ] as const
+        ).map(([key, label, count, hint]) => (
+          <button
+            key={key}
+            className={`priority-tile ${key} ${priority === key ? "selected" : ""}`}
+            aria-pressed={priority === key}
+            onClick={() => {
+              setPriority(priority === key ? "all" : key);
+              setPage(0);
+            }}
+          >
+            <span>{label}</span>
+            <strong>{count}</strong>
+            <small>{hint}</small>
+          </button>
+        ))}
       </section>
       <p className="muted">
         Приоритет — очередь помощи, не рейтинг людей. Паузы и причины
@@ -1227,6 +1263,29 @@ function HR({
           </small>
         </section>
       </div>
+      <div className="hr-grid">
+        <NoStepPanel
+          data={d}
+          onFilter={() => {
+            setPriority("no_step");
+            setPage(0);
+          }}
+        />
+        <section className="panel safety-panel">
+          <Target size={26} />
+          <h2>Готовы к росту: {d.growth_ready}</h2>
+          <p>
+            Балл = 100 × (0,35·готовность к цели + 0,25·закрытые критичные
+            навыки + 0,15·прирост уровней за год + 0,15·запас по текущему грейду
+            + 0,10·вовлечённость). От 65 — повод обсудить переход.
+          </p>
+          <small>
+            Считается только при назначенной HR цели и полной оценке навыков.
+            Это не решение о повышении.
+          </small>
+        </section>
+      </div>
+      <ActivitiesPanel activities={d.activities} />
       {isHR && <EvidenceHRPanel onSelect={onSelect} />}
       <section className="panel table-panel">
         <div className="panel-title">
@@ -1273,6 +1332,8 @@ function HR({
               <option value="high">Высокий</option>
               <option value="medium">Средний</option>
               <option value="planned">Плановый</option>
+              <option value="growth">Готовы к росту</option>
+              <option value="no_step">Без рекомендованного шага</option>
             </select>
             <select
               aria-label="Фильтр по роли"
@@ -1338,6 +1399,16 @@ function HR({
                         {e.plan.next_review_on
                           ? ` · ${dateText(e.plan.next_review_on)}`
                           : ""}
+                      </small>
+                    )}
+                    {e.growth?.ready && (
+                      <span className="priority-badge growth">
+                        Готов к росту · {e.growth.score}/100
+                      </span>
+                    )}
+                    {e.no_step && (
+                      <small className="no-step">
+                        Нет рекомендованного шага: {e.no_step.text}
                       </small>
                     )}
                     {!!e.mandatory_overdue && (

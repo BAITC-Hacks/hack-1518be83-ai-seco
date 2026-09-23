@@ -57,6 +57,7 @@ def gap_rows(employee, levels, role_profiles, skills):
 def eligible(employee, levels, event, history, as_of):
     if (
         event["mandatory"]
+        or event.get("retired")
         or employee["role"] not in event["target_roles"]
         or employee["grade"] not in event["target_grades"]
     ):

@@ -6,7 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.domain import current_skills, gap_rows, readiness
+from app.domain import current_skills, gap_rows, readiness, recommendations
+from app.insights import NO_STEP, growth_readiness, no_step_reason, participation
 from app.models import Account, Audit, Completion, Document, now
 from app.onboarding import elapsed_months, needs_assessment, onboarding_data, profile_readiness
 from app.security import current_account, hr_account, readable_employee, team_department
@@ -165,6 +166,16 @@ def build_overview(account, session):
         if row["date"] <= as_of:
             by_employee.setdefault(row["employee_id"], []).append(row)
     skill_names = {s["skill_id"]: s for s in skills["skills"]}
+    focus = {}
+    for o in session.exec(select(Document).where(Document.kind == "observation")).all():
+        o = o.payload
+        if o["kind"] == "development" and o["status"] == "confirmed":
+            focus.setdefault(o["employee_id"], set()).add(o["skill_id"])
+    pending = session.exec(select(Completion).where(Completion.status == "pending")).all()
+    waiting = {}
+    for c in pending:
+        waiting.setdefault(c.employee_id, set()).add(c.event_id)
+    profiles = {(p["role"], p["grade"]): p for p in skills["role_profiles"]}
     rows, totals = [], {}
     for employee in employees:
         eid = employee["employee_id"]
@@ -232,6 +243,29 @@ def build_overview(account, session):
             and (r["status"] == "overdue" or bool(r.get("due_date") and r["due_date"] < as_of))
             for r in latest.values()
         )
+        ready = profile_readiness(gaps, metadata, readiness)
+        blocked = needs_assessment(metadata)
+        steps = (
+            []
+            if blocked
+            else recommendations(
+                employee,
+                levels,
+                assessed,
+                events,
+                own,
+                as_of,
+                waiting.get(eid, ()),
+                focus.get(eid, ()),
+            )
+        )
+        reason = (
+            None
+            if steps
+            else no_step_reason(
+                employee, levels, assessed, events, own, as_of, waiting.get(eid, ()), blocked
+            )
+        )
         rows.append(
             {
                 "employee_id": eid,
@@ -240,7 +274,19 @@ def build_overview(account, session):
                 "role": employee["role"],
                 "grade": employee["grade"],
                 "goal": employee["career_goal"],
-                "readiness": profile_readiness(gaps, metadata, readiness),
+                "readiness": ready,
+                "next_steps": len(steps),
+                "no_step": {"code": reason, "text": NO_STEP[reason]} if reason else None,
+                "growth": growth_readiness(
+                    employee,
+                    levels,
+                    assessed,
+                    own,
+                    events,
+                    as_of,
+                    profiles.get((employee["role"], employee["grade"])),
+                    ready,
+                ),
                 "signals": signals,
                 "priority": priority,
                 "critical_gaps": critical,
@@ -254,7 +300,6 @@ def build_overview(account, session):
     ranks = {"high": 0, "medium": 1, "planned": 2}
     rows.sort(key=lambda r: (ranks[r["priority"]], -r["critical_gaps"], r["full_name"]))
     ids = {e["employee_id"] for e in employees}
-    pending = session.exec(select(Completion).where(Completion.status == "pending")).all()
     names = {e["employee_id"]: e["full_name"] for e in employees}
     return {
         "employees": rows,
@@ -263,6 +308,17 @@ def build_overview(account, session):
         "departments": sorted({e["department"] for e in employees}),
         "without_goal": sum(not e["career_goal"] for e in employees),
         "priorities": {p: sum(r["priority"] == p for r in rows) for p in ranks},
+        "growth_ready": sum(bool(r["growth"] and r["growth"]["ready"]) for r in rows),
+        "no_step": sum(r["no_step"] is not None for r in rows),
+        "no_step_reasons": sorted(
+            (
+                {"code": code, "text": NO_STEP[code], "count": n}
+                for code in NO_STEP
+                if (n := sum(bool(r["no_step"]) and r["no_step"]["code"] == code for r in rows))
+            ),
+            key=lambda r: -r["count"],
+        ),
+        "activities": participation(ids, history, events, as_of),
         "policy": policy,
         "as_of": as_of,
         "hr_owners": [

@@ -130,6 +130,28 @@ export type HRRow = {
   paused: boolean;
   mandatory_overdue: number;
   plan: DevelopmentPlan | null;
+  next_steps: number;
+  no_step: { code: string; text: string } | null;
+  growth: {
+    score: number;
+    ready: boolean;
+    parts: Record<string, number>;
+  } | null;
+};
+export type Activity = {
+  event_id: string;
+  title: string;
+  type: string;
+  format: string;
+  mandatory: boolean;
+  participants: number;
+  completed: number;
+  no_show: number;
+  dropped: number;
+  declined: number;
+  in_progress: number;
+  overdue: number;
+  completion_rate: number | null;
 };
 export type Overview = {
   total: number;
@@ -141,6 +163,10 @@ export type Overview = {
   departments: string[];
   as_of: string;
   priorities: Record<"high" | "medium" | "planned", number>;
+  growth_ready: number;
+  no_step: number;
+  no_step_reasons: { code: string; text: string; count: number }[];
+  activities: Activity[];
   policy: SupportPolicy;
   hr_owners: string[];
 };
