@@ -298,3 +298,23 @@ export type CourseRecord = {
   updated_at: string;
   history: { action: string; actor: string; at: string; note: string }[];
 };
+export type Reassessment = {
+  reassessment_id: string;
+  status: "proposed" | "confirmed" | "rejected";
+  assessed_on: string;
+  method: string;
+  previous_review_date: string;
+  proposed_by: string;
+  decided_by: string | null;
+  confirmed_at: string | null;
+  note?: string;
+  decision_note?: string | null;
+  comparison: {
+    skill_id: string;
+    name: string;
+    before: number;
+    after: number;
+    delta: number;
+    evidence: string | null;
+  }[];
+};

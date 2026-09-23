@@ -31,6 +31,8 @@ from app.onboarding import (
 from app.onboarding import (
     router as onboarding_router,
 )
+from app.reassessment import effective_employee
+from app.reassessment import router as reassessment_router
 from app.schemas import CompletionRequest, Employee, Goal, Login, Review
 from app.security import create_token, current_account, hr_account, password_hash, readable_employee
 from app.seed import bundle, validate_import
@@ -43,6 +45,7 @@ app.include_router(evidence_router)
 app.include_router(connectors_router)
 app.include_router(team_router)
 app.include_router(catalog_router)
+app.include_router(reassessment_router)
 
 
 @app.middleware("http")
@@ -123,6 +126,8 @@ def employee_document(eid, account, session):
 
 
 def profile_data(employee, session, data=None):
+    # A confirmed reassessment is the effective baseline; the stored profile stays unchanged.
+    employee = effective_employee(session, employee)
     skills, events, history = data or bundle(session)
     as_of = skills["meta"]["as_of_date"]
     history = [r for r in history if r["employee_id"] == employee["employee_id"]]
@@ -245,7 +250,7 @@ def request_completion(
     done_date = body.completed_at.isoformat()
     if not event or event["mandatory"]:
         raise HTTPException(422, "Здесь подтверждаются только добровольные мероприятия")
-    e = doc.payload
+    e = effective_employee(session, doc.payload)
     if e["role"] not in event["target_roles"] or e["grade"] not in event["target_grades"]:
         raise HTTPException(422, "Мероприятие не подходит аудитории сотрудника")
     if not e["last_review_date"] < done_date <= skills["meta"]["as_of_date"]:

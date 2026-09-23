@@ -10,6 +10,7 @@ from app.domain import current_skills, gap_rows, readiness, recommendations
 from app.insights import NO_STEP, growth_readiness, no_step_reason, participation
 from app.models import Account, Audit, Completion, Document, now
 from app.onboarding import elapsed_months, needs_assessment, onboarding_data, profile_readiness
+from app.reassessment import effective, latest_baselines
 from app.security import current_account, hr_account, readable_employee, team_department
 from app.seed import bundle
 
@@ -149,6 +150,8 @@ def build_overview(account, session):
     ]
     if department is not None:
         employees = [e for e in employees if e["department"] == department]
+    baselines = latest_baselines(session)
+    employees = [effective(e, baselines.get(e["employee_id"])) for e in employees]
     as_of = skills["meta"]["as_of_date"]
     policy = policy_data(session)
     cutoff = (date.fromisoformat(as_of) - timedelta(days=policy["inactivity_days"])).isoformat()

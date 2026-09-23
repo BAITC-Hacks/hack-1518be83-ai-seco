@@ -41,6 +41,7 @@ import { AssessmentForm, CreateEmployeeForm } from "./OnboardingForms";
 import { EvidenceHRPanel, WorkEvidencePanel } from "./WorkEvidence";
 import { ActivitiesPanel, AIBriefing, NoStepPanel } from "./HRInsights";
 import { CatalogPage, QuizPanel } from "./Catalog";
+import { ReassessmentPanel } from "./Reassessment";
 import type { Catalog, Completion, Overview, Profile, User } from "./types";
 import "./style.css";
 
@@ -471,6 +472,7 @@ function App() {
                 tab={isLead ? "path" : tab}
                 isHR={isHR}
                 isManager={isManager}
+                username={user.username}
                 onBack={() => setSelected(null)}
               />
             ) : null
@@ -489,6 +491,7 @@ function ProfileView({
   tab,
   isHR,
   isManager = false,
+  username,
   onBack,
 }: {
   eid: string;
@@ -496,6 +499,7 @@ function ProfileView({
   tab: string;
   isHR: boolean;
   isManager?: boolean;
+  username: string;
   onBack: () => void;
 }) {
   const cache = useQueryClient();
@@ -809,6 +813,15 @@ function ProfileView({
       )}
       {tab === "path" && (
         <DevelopmentPanel profile={p} editable={isHR} onSaved={refresh} />
+      )}
+      {(tab === "skills" || (tab === "path" && (isHR || isManager))) && (
+        <ReassessmentPanel
+          profile={p}
+          catalog={catalog}
+          isHR={isHR}
+          username={username}
+          onChanged={refresh}
+        />
       )}
       {tab === "learning" && !isManager && (
         <LearningPanel profile={p} onComplete={setCompletion} />

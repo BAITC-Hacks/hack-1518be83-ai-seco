@@ -21,6 +21,7 @@ from app.config import settings
 from app.db import get_session
 from app.domain import apply_gains, current_skills, eligible, gap_rows
 from app.models import AIBudget, Audit, Document, now
+from app.reassessment import effective_employee
 from app.security import current_account, hr_account
 from app.seed import bundle
 
@@ -486,7 +487,7 @@ def work_evidence(
     employee_doc = session.get(Document, f"employee:{eid}")
     if not employee_doc:
         raise HTTPException(404, "Сотрудник не найден")
-    employee = employee_doc.payload
+    employee = effective_employee(session, employee_doc.payload)
     artifacts, tasks, criteria, unmatched = work_context(session, eid)
     _, insufficient = analyze_rules(eid, artifacts, tasks, criteria)
     observations = observations_for(session, eid)
