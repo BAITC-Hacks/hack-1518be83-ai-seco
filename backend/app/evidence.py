@@ -206,16 +206,40 @@ def load(session, kind):
     return [d.payload for d in session.exec(select(Document).where(Document.kind == kind)).all()]
 
 
-def work_context(session, eid):
-    identities = {
+def identity_map(session):
+    return {
         (i["source"], i["external_id"]): i["employee_id"] for i in load(session, "work_identity")
     }
+
+
+def resolve(identities, source, external_id):
+    """Jira and Confluence share Atlassian account IDs; a mapping in either applies to both."""
+    if not external_id:
+        return None
+    found = identities.get((source, external_id))
+    if found is None and source in {"jira", "confluence"}:
+        other = "confluence" if source == "jira" else "jira"
+        found = identities.get((other, external_id))
+    return found
+
+
+def task_owner(task, identities):
+    return task.get("employee_id") or resolve(identities, "jira", task.get("assignee_external_id"))
+
+
+def usable(finding):
+    """Imported findings are pre-labelled; live ones count only after HR confirms a criterion."""
+    return finding.get("label_status", "labeled") == "labeled" and bool(finding.get("criterion_id"))
+
+
+def work_context(session, eid):
+    identities = identity_map(session)
     tasks = {t["task_id"]: t for t in load(session, "work_task")}
     criteria = {c["criterion_id"]: c for c in load(session, "work_criterion")}
     own, unmatched = [], 0
     for a in load(session, "work_artifact"):
-        author = identities.get((a["source"], a["author_external_id"]))
-        co = [identities.get((a["source"], x)) for x in a["co_author_external_ids"]]
+        author = resolve(identities, a["source"], a["author_external_id"])
+        co = [resolve(identities, a["source"], x) for x in a["co_author_external_ids"]]
         if author is None:
             unmatched += 1  # Unknown author is never guessed from names.
             continue
@@ -224,7 +248,7 @@ def work_context(session, eid):
             shared = bool(a["co_author_external_ids"]) or role == "co_author"
             own.append({**a, "contribution": role, "shared": shared})
     task_ids = {a["task_id"] for a in own} | {
-        t["task_id"] for t in tasks.values() if t["employee_id"] == eid
+        t["task_id"] for t in tasks.values() if task_owner(t, identities) == eid
     }
     return own, {k: tasks[k] for k in task_ids if k in tasks}, criteria, unmatched
 
@@ -239,7 +263,7 @@ def analyze_rules(eid, artifacts, tasks, criteria):
     for a in artifacts:
         key = tasks.get(a["task_id"], {}).get("key", a["task_id"])
         for f in a["findings"]:
-            if f["outcome"] == "not_applicable":
+            if f["outcome"] == "not_applicable" or not usable(f):
                 continue
             patterns.setdefault((f["criterion_id"], "development"), []).append(
                 {
@@ -286,7 +310,12 @@ def analyze_rules(eid, artifacts, tasks, criteria):
                 }
             )
             continue
-        limitations = ["Вывод по синтетическим рабочим примерам, не по реальным данным."]
+        live = {a["artifact_id"] for a in artifacts if a.get("connection_id")}
+        limitations = [
+            "Замечания из подключённых систем размечены HR; контекст задачи проверяет эксперт."
+            if any(e["artifact_id"] in live for e in evidence)
+            else "Вывод по синтетическим рабочим примерам, не по реальным данным."
+        ]
         shared = sum(e["shared"] for e in evidence)
         if shared:
             limitations.append(
@@ -516,7 +545,11 @@ def work_evidence(
                     "shared",
                 )
             }
-            | {"findings": len(a["findings"]), "task_key": tasks.get(a["task_id"], {}).get("key")}
+            | {
+                "findings": sum(usable(f) for f in a["findings"]),
+                "pending_findings": sum(f.get("label_status") == "pending" for f in a["findings"]),
+                "task_key": tasks.get(a["task_id"], {}).get("key"),
+            }
             for a in sorted(artifacts, key=lambda a: a["created_at"], reverse=True)
         ],
         "tasks": [

@@ -23,6 +23,7 @@ def isolate_ai_provider(monkeypatch):
 
     monkeypatch.setattr(ai, "explain", unexpected_provider)
     monkeypatch.setattr(ai, "summarize_observations", unexpected_provider)
+    monkeypatch.setattr(ai, "suggest_criteria", unexpected_provider)
 
 
 @pytest.fixture

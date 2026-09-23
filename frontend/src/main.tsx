@@ -36,6 +36,7 @@ import {
   PolicyForm,
   planLabels,
 } from "./Development";
+import { Integrations } from "./Integrations";
 import { AssessmentForm, CreateEmployeeForm } from "./OnboardingForms";
 import { EvidenceHRPanel, WorkEvidencePanel } from "./WorkEvidence";
 import type { Catalog, Completion, Overview, Profile, User } from "./types";
@@ -424,7 +425,11 @@ function App() {
             <p className="error">{errorText(catalog.error)}</p>
           ) : catalog.data ? (
             tab === "connections" ? (
-              <Connections />
+              isHR ? (
+                <Integrations />
+              ) : (
+                <Connections />
+              )
             ) : isLead && !selected ? (
               <HR
                 isHR={isHR}
@@ -1566,11 +1571,12 @@ function Connections() {
           <span className="eyebrow">РАБОЧИЕ ПРИМЕРЫ</span>
           <h1>Навыки из реальной работы</h1>
           <p>
-            Анализ работает на синтетическом импорте в формате будущих
-            коннекторов. Живых подключений к рабочим системам пока нет.
+            HR может подключить GitHub, Jira и Confluence только на чтение.
+            Наблюдения о навыках появляются после привязки аккаунта, разметки
+            замечаний и решения эксперта.
           </p>
         </div>
-        <span className="badge">Синтетический импорт</span>
+        <span className="badge">Управляет HR</span>
       </div>
       <div className="quest-grid">
         {[
@@ -1593,9 +1599,7 @@ function Connections() {
             </span>
             <h2>{name}</h2>
             <p>{description}</p>
-            <span className="status">
-              Импорт JSON · живое подключение не настроено
-            </span>
+            <span className="status">Только чтение · подключает HR</span>
           </section>
         ))}
       </div>

@@ -84,7 +84,7 @@ export function WorkEvidencePanel({
       <div className="panel-title">
         <div>
           <span className="eyebrow">
-            РАБОЧИЕ ПРИМЕРЫ · СИНТЕТИЧЕСКИЕ ДАННЫЕ
+            РАБОЧИЕ ПРИМЕРЫ · ТОЛЬКО ПОДТВЕРЖДЁННЫЕ ЗАМЕЧАНИЯ
           </span>
           <h2>Навыки по реальной работе</h2>
         </div>

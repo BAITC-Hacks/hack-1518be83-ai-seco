@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 
 from app import ai
 from app.config import settings
+from app.connectors import router as connectors_router
 from app.db import get_session
 from app.domain import current_skills, gap_rows, readiness, recommendations
 from app.evidence import confirmed_focus
@@ -38,6 +39,7 @@ from app.team import router as team_router
 app = FastAPI(title="Career Quest", version="0.1.0")
 app.include_router(onboarding_router)
 app.include_router(evidence_router)
+app.include_router(connectors_router)
 app.include_router(team_router)
 
 
