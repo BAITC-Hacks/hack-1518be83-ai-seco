@@ -559,12 +559,20 @@ async def ai_explanation(
         ],
     }
     # No employee names, IDs, source documents or private feedback are sent to the model.
+    result = await guarded_ai(session, "v1", context, ai.explain)
+    if "error" in result:
+        return {"mode": "rules", "message": result["error"], "explanations": {}}
+    return {"mode": "ai", "explanations": result["payload"], "cached": result["cached"]}
+
+
+async def guarded_ai(session, version, context, call):
+    """Shared cache, daily call budget and failure handling for every model call."""
     key = hashlib.sha256(
-        json.dumps([settings.openai_model, "v1", context], sort_keys=True).encode()
+        json.dumps([settings.openai_model, version, context], sort_keys=True).encode()
     ).hexdigest()
     cached = session.get(AICache, key)
     if cached:
-        return {"mode": "ai", "explanations": cached.payload, "cached": True}
+        return {"payload": cached.payload, "cached": True}
     day = datetime.now(UTC).date().isoformat()
     if not session.get(AIBudget, day):
         try:
@@ -579,22 +587,16 @@ async def ai_explanation(
     )
     session.commit()
     if updated.rowcount != 1:
-        return {
-            "mode": "rules",
-            "message": "Дневной лимит AI-запросов исчерпан",
-            "explanations": {},
-        }
+        return {"error": "Дневной лимит AI-запросов исчерпан"}
     try:
-        explanations = await ai.explain(context)
+        payload = await call(context)
     except Exception:
         return {
-            "mode": "rules",
-            "message": "AI не ответил корректно за отведённое время. Сохранён подбор по правилам.",
-            "explanations": {},
+            "error": "AI не ответил корректно за отведённое время. Сохранён подбор по правилам."
         }
-    session.merge(AICache(id=key, payload=explanations))
+    session.merge(AICache(id=key, payload=payload))
     session.commit()
-    return {"mode": "ai", "explanations": explanations, "cached": False}
+    return {"payload": payload, "cached": False}
 
 
 def by_employee(history):
@@ -735,6 +737,10 @@ def team_overview(
 
 @app.get("/api/team/employees/{eid}")
 def team_card(eid: str, account=Depends(staff_account), session: Session = Depends(get_session)):
+    return card_data(eid, account, session)
+
+
+def card_data(eid, account, session):
     employee = employee_document(eid, account, session).payload
     skills, events, history = bundle(session)
     as_of = skills["meta"]["as_of_date"]
@@ -801,7 +807,88 @@ def team_card(eid: str, account=Depends(staff_account), session: Session = Depen
             role_skills(skills, employee),
         ),
         "discussed": bool(discussed),
+        "as_of": as_of,
     }
+
+
+def briefing_context(card):
+    """Facts for the model. No name, ID, department or manager leaves the server."""
+    signal = card["integrations"]["signal"]
+    return {
+        "today": card["as_of"],
+        "role": card["employee"]["role"],
+        "grade": card["employee"]["grade"],
+        "target": {
+            "role": card["target"]["role"],
+            "grade": card["target"]["grade"],
+            "chosen_by_employee": card["target"]["chosen"],
+        },
+        "readiness_to_target_percent": card["readiness"],
+        "current_grade_coverage_percent": card["coverage"],
+        "support": {
+            "level": card["priority"]["label"],
+            "score_points_of_100": card["priority"]["score"],
+            "factors": [
+                {
+                    "factor": f["label"],
+                    "points": f["points"],
+                    "max": f["weight"] * 100,
+                    "fact": f["detail"],
+                }
+                for f in card["priority"]["factors"]
+                if f["points"] > 0
+            ],
+            "overdue_mandatory": card["priority"]["overdue_mandatory"],
+        },
+        "growth": {
+            "score_points_of_100": card["growth"]["score"],
+            "ready_for_promotion_talk": card["growth"]["ready"],
+        },
+        "gaps": [
+            {k: g[k] for k in ("name", "current", "required", "critical")}
+            for g in card["gaps"]
+            if g["gap"] > 0
+        ][:8],
+        "recommendations": [
+            {
+                k: r[k]
+                for k in (
+                    "event_id",
+                    "title",
+                    "format",
+                    "duration_hours",
+                    "next_session",
+                    "benefits",
+                )
+            }
+            for r in card["recommendations"]
+        ],
+        "open_learning": [
+            {"title": r["title"], "mandatory": r["mandatory"], "status": r["status"]}
+            for r in card["open_learning"]
+        ],
+        "work_signal": {
+            "hypothesis": signal["title"],
+            "sufficient_data": signal["sufficient"],
+            "episodes": [e["note"] for e in signal["evidence"]][:6],
+            "practice_idea": signal["practice"],
+        }
+        if signal
+        else None,
+    }
+
+
+@app.post("/api/team/employees/{eid}/ai-summary")
+async def ai_summary(
+    eid: str, account=Depends(staff_account), session: Session = Depends(get_session)
+):
+    card = card_data(eid, account, session)
+    if not settings.ai_enabled or not settings.openai_api_key:
+        return {"mode": "rules", "message": "AI не подключён. Используйте факторы и выжимку выше."}
+    result = await guarded_ai(session, "brief-v3", briefing_context(card), ai.brief)
+    if "error" in result:
+        return {"mode": "rules", "message": result["error"]}
+    return {"mode": "ai", "briefing": result["payload"], "cached": result["cached"]}
 
 
 @app.post("/api/team/employees/{eid}/discuss")

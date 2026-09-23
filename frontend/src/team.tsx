@@ -7,6 +7,7 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { api, post } from "./api";
 import type {
@@ -770,6 +771,7 @@ export function EmployeeCard({
                   эффективности.
                 </small>
               </div>
+              <AIBriefing eid={eid} recommendations={c.recommendations} />
               <h3>
                 Выжимка из GitHub и Jira <span className="demo-tag">ДЕМО</span>
               </h3>
@@ -943,6 +945,88 @@ export function EmployeeCard({
           );
         })()}
     </Modal>
+  );
+}
+
+type Briefing = {
+  summary: string;
+  talking_points: string[];
+  next_step: string;
+  event_id: string | null;
+};
+
+function AIBriefing({
+  eid,
+  recommendations,
+}: {
+  eid: string;
+  recommendations: Card["recommendations"];
+}) {
+  const [result, setResult] = useState<{
+      mode: string;
+      briefing?: Briefing;
+      message?: string;
+    } | null>(null),
+    [busy, setBusy] = useState(false);
+  async function ask() {
+    setBusy(true);
+    try {
+      setResult(await post(`/team/employees/${eid}/ai-summary`));
+    } catch (e) {
+      setResult({ mode: "rules", message: errorText(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+  const b = result?.briefing;
+  const event = b?.event_id
+    ? recommendations.find((r) => r.event_id === b.event_id)
+    : undefined;
+  return (
+    <section className="ai-briefing">
+      <div className="panel-head">
+        <div>
+          <p className="section-kicker">AI-РАЗБОР ДЛЯ РАЗГОВОРА</p>
+          <h3>Как начать разговор о развитии</h3>
+        </div>
+        <button className="secondary-button" onClick={ask} disabled={busy}>
+          <Sparkles size={16} />
+          {busy ? "AI готовит разбор…" : b ? "Обновить" : "Подготовить с AI"}
+        </button>
+      </div>
+      {!result && (
+        <p className="muted">
+          Модель получает только проверенные факты: роль, разрывы, факторы
+          очереди, каталог и эпизоды работы. Без имени и ID сотрудника.
+        </p>
+      )}
+      {result && !b && <p className="warn-text">{result.message}</p>}
+      {b && (
+        <div className="briefing-body">
+          <p>{b.summary}</p>
+          <b>О чём спросить</b>
+          <ul>
+            {b.talking_points.map((point) => (
+              <li key={point}>{point}</li>
+            ))}
+          </ul>
+          <div className="suggested-step">
+            <p className="section-kicker">ШАГ НА 2 НЕДЕЛИ</p>
+            <p>{b.next_step}</p>
+            {event && (
+              <small>
+                Мероприятие из каталога: {event.title} · {event.duration_hours}{" "}
+                ч
+              </small>
+            )}
+          </div>
+          <small className="muted">
+            Черновик AI для подготовки. Проверьте факты — решение принимает
+            человек.
+          </small>
+        </div>
+      )}
+    </section>
   );
 }
 

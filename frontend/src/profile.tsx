@@ -265,7 +265,7 @@ export function ProfileView({
                   quest={q}
                   index={i}
                   explanation={explanations[q.event_id]}
-                  canComplete={viewer === "self" && q.format === "self_paced"}
+                  canComplete={canEdit && q.format === "self_paced"}
                   onComplete={() => setCompletion(q)}
                 />
               ))}

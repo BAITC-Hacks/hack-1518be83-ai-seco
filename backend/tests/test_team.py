@@ -118,3 +118,55 @@ def test_orientation_is_a_hint_without_recommendations(client):
     profile = client.get("/api/employees/E1").json()
     assert profile["orientation"]["grade"] == "Senior"
     assert profile["recommendations"] == [] and profile["readiness"] is None
+
+
+def test_ai_briefing_is_anonymous_cached_and_scoped(client, monkeypatch):
+    from app import ai
+    from app.config import settings
+
+    sign_in(client, "hr")
+    monkeypatch.setattr(settings, "ai_enabled", False)
+    assert client.post("/api/team/employees/E1/ai-summary").json()["mode"] == "rules"
+    monkeypatch.setattr(settings, "ai_enabled", True)
+    monkeypatch.setattr(settings, "openai_api_key", "mock-not-a-key")
+    calls = []
+
+    async def fake(context):
+        calls.append(context)
+        text = str(context)
+        assert "Demo Employee" not in text and "E1" not in text and "Engineering" not in text
+        return {
+            "summary": "Synthetic summary for the conversation.",
+            "talking_points": ["Point one", "Point two"],
+            "next_step": "Synthetic next step",
+            "event_id": None,
+        }
+
+    monkeypatch.setattr(ai, "brief", fake)
+    first = client.post("/api/team/employees/E1/ai-summary").json()
+    assert first["mode"] == "ai" and not first["cached"]
+    assert client.post("/api/team/employees/E1/ai-summary").json()["cached"]
+    assert len(calls) == 1
+    sign_in(client, "manager")
+    assert client.post("/api/team/employees/E7/ai-summary").status_code == 403
+    sign_in(client)
+    assert client.post("/api/team/employees/E1/ai-summary").status_code == 403
+
+
+def test_ai_briefing_rejects_invented_event(monkeypatch):
+    import asyncio
+
+    import pytest
+    from app import ai
+    from pydantic_ai.messages import ModelResponse, TextPart
+    from pydantic_ai.models.function import FunctionModel
+
+    def invented(messages, info):
+        body = '{"summary": "Twenty chars summary here.", "talking_points": ["a1", "b2"], '
+        body += '"next_step": "Take the invented course", "event_id": "EV_999"}'
+        return ModelResponse(parts=[TextPart(body)])
+
+    monkeypatch.setattr(ai, "OpenAIResponsesModel", lambda *a, **k: FunctionModel(invented))
+    context = {"recommendations": [{"event_id": "EV_001"}]}
+    with pytest.raises(ValueError, match="outside the verified"):
+        asyncio.run(ai.brief_with_provider(context, provider=None))
