@@ -1,0 +1,38 @@
+name: career-quest
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: quest
+      POSTGRES_PASSWORD: local-demo-only
+      POSTGRES_DB: quest
+    volumes:
+      - quest-db:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U quest -d quest"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://quest:local-demo-only@db:5432/quest
+      DATASET_PATH: /data
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-careerquest-demo}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-sol}
+      AI_ENABLED: ${AI_ENABLED:-false}
+    volumes:
+      - ${DATASET_PATH:-../materials/career_quest_dataset}:/data:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+volumes:
+  quest-db:
