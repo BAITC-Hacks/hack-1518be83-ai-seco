@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app import ai
+from app.catalog import router as catalog_router
 from app.config import settings
 from app.connectors import router as connectors_router
 from app.db import get_session
@@ -41,6 +42,7 @@ app.include_router(onboarding_router)
 app.include_router(evidence_router)
 app.include_router(connectors_router)
 app.include_router(team_router)
+app.include_router(catalog_router)
 
 
 @app.middleware("http")

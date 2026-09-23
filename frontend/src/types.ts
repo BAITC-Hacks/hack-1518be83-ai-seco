@@ -27,6 +27,7 @@ export type Gap = {
   assessed: boolean;
 };
 export type Quest = {
+  has_quiz?: boolean;
   event_id: string;
   title: string;
   description: string;
@@ -257,4 +258,43 @@ export type EvidenceQueue = {
     kind: string;
     task_keys: string[];
   }[];
+};
+export type CourseQuestion = {
+  question: string;
+  options: string[];
+  correct: number;
+  skill_id: string | null;
+};
+export type CourseDraftData = {
+  title: string;
+  description: string;
+  type: "course" | "workshop" | "mentoring" | "certification" | "meetup";
+  format: "online" | "offline" | "self_paced";
+  duration_hours: number;
+  target_roles: string[];
+  target_grades: string[];
+  develops_skills: { skill_id: string; gain: number; max_level: number }[];
+  prerequisites: Record<string, number>;
+  upcoming_sessions: string[];
+  quiz: { pass_score: number; questions: CourseQuestion[] } | null;
+};
+export type CourseRecord = {
+  course_id: string;
+  status:
+    | "draft"
+    | "in_review"
+    | "changes_requested"
+    | "approved"
+    | "published"
+    | "archived";
+  version: number;
+  revision: number;
+  draft: CourseDraftData;
+  author: string;
+  reviewer: string | null;
+  ai_assisted: boolean;
+  event_id: string | null;
+  previous_event_ids: string[];
+  updated_at: string;
+  history: { action: string; actor: string; at: string; note: string }[];
 };

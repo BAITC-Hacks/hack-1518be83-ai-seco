@@ -40,6 +40,7 @@ import { Integrations } from "./Integrations";
 import { AssessmentForm, CreateEmployeeForm } from "./OnboardingForms";
 import { EvidenceHRPanel, WorkEvidencePanel } from "./WorkEvidence";
 import { ActivitiesPanel, AIBriefing, NoStepPanel } from "./HRInsights";
+import { CatalogPage, QuizPanel } from "./Catalog";
 import type { Catalog, Completion, Overview, Profile, User } from "./types";
 import "./style.css";
 
@@ -143,6 +144,7 @@ function Modal({
 function Login({ onLogin }: { onLogin: (user: User) => void }) {
   const [role, setRole] = useState("employee"),
     [username, setUsername] = useState("employee"),
+    [hrUser, setHRUser] = useState("hr"),
     [password, setPassword] = useState("careerquest-demo"),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -154,7 +156,7 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
       onLogin(
         await post<User>("/auth/login", {
           username:
-            role === "hr" ? "hr" : role === "manager" ? "manager" : username,
+            role === "hr" ? hrUser : role === "manager" ? "manager" : username,
           password,
         }),
       );
@@ -232,6 +234,22 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
               <small>Мой отдел</small>
             </button>
           </div>
+          {role === "hr" && (
+            <label>
+              Логин HR
+              <input
+                value={hrUser}
+                onChange={(e) => setHRUser(e.target.value)}
+                autoComplete="username"
+                maxLength={80}
+                required
+              />
+              <small>
+                Демо: hr или expert — второй HR-эксперт для проверки курсов,
+                аттестаций и наград.
+              </small>
+            </label>
+          )}
           {role === "employee" && (
             <label>
               Логин сотрудника
@@ -349,6 +367,9 @@ function App() {
           {(isLead
             ? [
                 ["team", Users, isHR ? "Команда" : "Мой отдел"],
+                ...(isHR
+                  ? [["catalog", GraduationCap, "Каталог и тесты"]]
+                  : []),
                 ["connections", Link2, "Интеграции"],
               ]
             : [
@@ -431,6 +452,8 @@ function App() {
               ) : (
                 <Connections />
               )
+            ) : tab === "catalog" && isHR ? (
+              <CatalogPage catalog={catalog.data} username={user.username} />
             ) : isLead && !selected ? (
               <HR
                 isHR={isHR}
@@ -773,6 +796,9 @@ function ProfileView({
             </p>
           )}
         </section>
+      )}
+      {tab === "path" && !isHR && !isManager && (
+        <QuizPanel eid={eid} quests={p.recommendations} onDone={refresh} />
       )}
       {tab === "path" && (isHR || isManager) && (
         <AIBriefing

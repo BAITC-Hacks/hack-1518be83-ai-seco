@@ -120,7 +120,23 @@ def seed_demo_manager(session):
     session.commit()
 
 
+def seed_demo_expert(session):
+    # A second HR account so drafts, reassessments and rewards get a four-eyes review.
+    if session.get(Account, "expert"):
+        return
+    session.add(
+        Account(
+            username="expert",
+            role="hr",
+            employee_id=None,
+            password_hash=PasswordHash.recommended().hash(settings.demo_password),
+        )
+    )
+    session.commit()
+
+
 if __name__ == "__main__":
     with Session(engine) as session:
         seed(session)
         seed_demo_manager(session)
+        seed_demo_expert(session)

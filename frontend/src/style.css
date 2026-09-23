@@ -2090,3 +2090,61 @@ td small.no-step {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.course-card > p {
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.course-card .button-group {
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 8px 0;
+}
+.course-card .button-group input {
+  min-width: 220px;
+}
+.status.course-published,
+.status.course-approved {
+  background: #eef5eb;
+  color: #5f8a4f;
+}
+.status.course-in_review,
+.status.course-changes_requested {
+  background: #fbf3dc;
+  color: #8e7a3f;
+}
+.status.course-archived {
+  background: #f1f1ee;
+  color: #8a8a80;
+}
+.course-form {
+  display: grid;
+  gap: 14px;
+}
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+.check-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 8px;
+}
+label.check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+.quiz-question {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
