@@ -4,14 +4,19 @@ import json
 from pwdlib import PasswordHash
 from sqlmodel import Session, select
 
+from app import integrations
 from app.config import settings
 from app.db import engine
-from app.models import Account, Document
+from app.models import Account, Connection, Document
 from app.schemas import Employee, HistoryRow
 
 
 def validate_import(employees, history, catalog, known_employees=()):
+    # The optional extension is stored only when present, keeping payloads equal to the source schema.
     parsed = [Employee.model_validate(e).model_dump(mode="json") for e in employees]
+    for e in parsed:
+        if e.get("github_login") is None:
+            e.pop("github_login", None)
     rows = [HistoryRow.model_validate(r).model_dump(mode="json") for r in history]
     employee_ids = {e["employee_id"] for e in parsed}
     if len(employee_ids) != len(parsed) or len({r["record_id"] for r in rows}) != len(rows):
@@ -58,17 +63,53 @@ def seed(session):
         session.add(Document(id=f"employee:{e['employee_id']}", kind="employee", payload=e))
     for r in history:
         session.add(Document(id=f"history:{r['record_id']}", kind="history", payload=r))
-    password = PasswordHash.recommended().hash(settings.demo_password)
-    employee_id = (
-        "E0002"
-        if any(e["employee_id"] == "E0002" for e in employees)
-        else employees[0]["employee_id"]
-    )
-    for username, role, eid in [("employee", "employee", employee_id), ("hr", "hr", None)]:
-        if not session.get(Account, username):
-            session.add(
-                Account(username=username, role=role, employee_id=eid, password_hash=password)
-            )
+    session.commit()
+
+
+def pick(ids, preferred, fallback):
+    return preferred if preferred in ids else fallback
+
+
+def ensure_demo(session):
+    """Accounts and demo connections; safe to run on every start and on existing databases."""
+    employees = [
+        d.payload for d in session.exec(select(Document).where(Document.kind == "employee")).all()
+    ]
+    if not employees:
+        return
+    ids = {e["employee_id"] for e in employees}
+    managers = sorted({e["manager_id"] for e in employees if e.get("manager_id")} & ids)
+    accounts = [
+        ("employee", "employee", pick(ids, "E0002", employees[0]["employee_id"])),
+        ("hr", "hr", None),
+        ("manager", "manager", pick(managers, "E0050", managers[0] if managers else None)),
+    ]
+    password = None
+    for username, role, eid in accounts:
+        if session.get(Account, username) or (role == "manager" and not eid):
+            continue
+        password = password or PasswordHash.recommended().hash(settings.demo_password)
+        session.add(Account(username=username, role=role, employee_id=eid, password_hash=password))
+    if not session.exec(select(Connection)).first():
+        by_id = {e["employee_id"]: e for e in employees}
+        for index, eid in enumerate(integrations.DEMO_SEEDS):
+            employee = by_id.get(eid)
+            if not employee:
+                continue
+            for source in integrations.SOURCES:
+                # As in the mockup: every seed shares Jira, most with an account also share GitHub.
+                if not integrations.available(employee, source) or (
+                    source == "github" and index % 4 == 0
+                ):
+                    continue
+                session.add(
+                    Connection(
+                        employee_id=eid,
+                        source=source,
+                        resources=integrations.resources(employee, source)[:1],
+                        synced_at="2026-09-30T18:00:00+05:00",
+                    )
+                )
     session.commit()
 
 
@@ -98,3 +139,4 @@ def bundle(session):
 if __name__ == "__main__":
     with Session(engine) as session:
         seed(session)
+        ensure_demo(session)

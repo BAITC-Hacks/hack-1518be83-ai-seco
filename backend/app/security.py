@@ -40,3 +40,10 @@ def hr_account(account=Depends(current_account)):
     if account.role != "hr":
         raise HTTPException(403, "Доступно только HR")
     return account
+
+
+def staff_account(account=Depends(current_account)):
+    """HR sees everyone; a manager sees their own department (checked per request)."""
+    if account.role not in {"hr", "manager"}:
+        raise HTTPException(403, "Доступно HR и руководителям")
+    return account

@@ -13,13 +13,22 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app import ai
+from app import ai, integrations
+from app.analytics import employee_facts, growth_readiness, latest_by_event, support_priority
 from app.config import settings
 from app.db import get_session
-from app.domain import current_skills, gap_rows, readiness, recommendations
-from app.models import AIBudget, AICache, Audit, Completion, Document, now
-from app.schemas import CompletionRequest, Employee, Goal, Login, Review
-from app.security import create_token, current_account, hr_account, password_hash
+from app.domain import (
+    current_skills,
+    find_profile,
+    gap_rows,
+    profile_gaps,
+    readiness,
+    recommendations,
+    target_profile,
+)
+from app.models import AIBudget, AICache, Audit, Completion, Connection, Document, now
+from app.schemas import CompletionRequest, ConnectRequest, Employee, Goal, Login, Review
+from app.security import create_token, current_account, hr_account, password_hash, staff_account
 from app.seed import bundle, validate_import
 
 app = FastAPI(title="Career Quest", version="0.1.0")
@@ -63,7 +72,7 @@ def login(body: Login, response: Response, session: Session = Depends(get_sessio
         samesite="strict",
         max_age=14400,
     )
-    return {"username": account.username, "role": account.role, "employee_id": account.employee_id}
+    return account_view(account, session)
 
 
 @app.post("/api/auth/logout")
@@ -72,9 +81,20 @@ def logout(response: Response):
     return {"ok": True}
 
 
+def account_view(account, session):
+    doc = session.get(Document, f"employee:{account.employee_id}") if account.employee_id else None
+    return {
+        "username": account.username,
+        "role": account.role,
+        "employee_id": account.employee_id,
+        "full_name": doc.payload["full_name"] if doc else None,
+        "department": doc.payload["department"] if doc else None,
+    }
+
+
 @app.get("/api/me")
-def me(account=Depends(current_account)):
-    return {"username": account.username, "role": account.role, "employee_id": account.employee_id}
+def me(account=Depends(current_account), session: Session = Depends(get_session)):
+    return account_view(account, session)
 
 
 @app.get("/api/catalog")
@@ -90,13 +110,56 @@ def catalog(account=Depends(current_account), session: Session = Depends(get_ses
     }
 
 
-def employee_document(eid, account, session):
-    if account.role != "hr" and account.employee_id != eid:
-        raise HTTPException(403, "Можно просматривать только свой профиль")
+def manager_department(account, session):
+    doc = session.get(Document, f"employee:{account.employee_id}") if account.employee_id else None
+    return doc.payload["department"] if doc else None
+
+
+def employee_document(eid, account, session, write=False):
     doc = session.get(Document, f"employee:{eid}")
+    own = account.employee_id == eid
+    in_department = (
+        account.role == "manager"
+        and doc is not None
+        and doc.payload["department"] == manager_department(account, session)
+    )
+    if not (account.role == "hr" or own or in_department):
+        raise HTTPException(403, "Можно просматривать только свой профиль")
+    if write and account.role == "manager" and not own:
+        raise HTTPException(403, "Руководитель видит профиль сотрудника, но не меняет его")
     if not doc:
         raise HTTPException(404, "Сотрудник не найден")
     return doc
+
+
+def team_members(account, session):
+    employees = [
+        d.payload for d in session.exec(select(Document).where(Document.kind == "employee")).all()
+    ]
+    if account.role == "manager":
+        department = manager_department(account, session)
+        employees = [e for e in employees if e["department"] == department]
+    return employees
+
+
+def connections_for(session, eid=None):
+    query = (
+        select(Connection)
+        if eid is None
+        else select(Connection).where(Connection.employee_id == eid)
+    )
+    result = {}
+    for c in session.exec(query).all():
+        result.setdefault(c.employee_id, {})[c.source] = {
+            "resources": c.resources,
+            "synced_at": c.synced_at,
+        }
+    return result
+
+
+def role_skills(skills, employee):
+    profile = find_profile(skills["role_profiles"], employee["role"], employee["grade"])
+    return list(profile["required_skills"]) if profile else []
 
 
 def profile_data(employee, session, data=None):
@@ -112,24 +175,47 @@ def profile_data(employee, session, data=None):
     ).all()
     pending = {c.event_id for c in completions if c.status == "pending"}
     recs = recommendations(employee, levels, gaps, events, history, as_of, pending)
+    orientation = None
+    if not employee.get("career_goal"):
+        # Shown as a hint only; the employee still chooses the goal and gets no recommendations.
+        target, _ = target_profile(employee, skills["role_profiles"])
+        if target:
+            hint = profile_gaps(target, levels, {s["skill_id"]: s for s in skills["skills"]})
+            orientation = {
+                "role": target["role"],
+                "grade": target["grade"],
+                "readiness": readiness(hint),
+            }
+    described = [
+        {
+            **r,
+            "title": events[r["event_id"]]["title"],
+            "format": events[r["event_id"]]["format"],
+            "mandatory": events[r["event_id"]]["mandatory"],
+        }
+        for r in history
+    ]
+    open_ids = {
+        r["record_id"]
+        for r in latest_by_event(history)
+        if r["status"] != "completed"
+        and (events[r["event_id"]]["mandatory"] or r["status"] == "in_progress")
+    }
     return {
         "employee": employee,
         "levels": levels,
         "gaps": gaps,
         "readiness": readiness(gaps),
+        "orientation": orientation,
         "recommendations": recs,
-        "history": sorted(
-            [
-                {
-                    **r,
-                    "title": events[r["event_id"]]["title"],
-                    "format": events[r["event_id"]]["format"],
-                }
-                for r in history
-            ],
-            key=lambda r: r["date"],
-            reverse=True,
-        ),
+        "history": sorted(described, key=lambda r: r["date"], reverse=True),
+        "learning": {
+            "open": sorted(
+                (r for r in described if r["record_id"] in open_ids),
+                key=lambda r: r["date"],
+                reverse=True,
+            ),
+        },
         "completions": [
             {**c.model_dump(), "title": events[c.event_id]["title"]} for c in completions
         ],
@@ -152,7 +238,7 @@ def goal(
     account=Depends(current_account),
     session: Session = Depends(get_session),
 ):
-    doc = employee_document(eid, account, session)
+    doc = employee_document(eid, account, session, write=True)
     skills, _, _ = bundle(session)
     if body and not any(
         p["role"] == body.target_role and p["grade"] == body.target_grade
@@ -173,7 +259,7 @@ def request_completion(
     account=Depends(current_account),
     session: Session = Depends(get_session),
 ):
-    doc = employee_document(eid, account, session)
+    doc = employee_document(eid, account, session, write=True)
     # Lock employee to serialize completion/history mutations.
     session.exec(select(Document).where(Document.id == doc.id).with_for_update()).one()
     skills, events, history = bundle(session)
@@ -509,6 +595,313 @@ async def ai_explanation(
     session.merge(AICache(id=key, payload=explanations))
     session.commit()
     return {"mode": "ai", "explanations": explanations, "cached": False}
+
+
+def by_employee(history):
+    grouped = {}
+    for row in history:
+        grouped.setdefault(row["employee_id"], []).append(row)
+    return grouped
+
+
+@app.get("/api/team/overview")
+def team_overview(
+    department: str | None = None,
+    role: str | None = None,
+    account=Depends(staff_account),
+    session: Session = Depends(get_session),
+):
+    skills, events, history = bundle(session)
+    as_of = skills["meta"]["as_of_date"]
+    skill_names = {s["skill_id"]: s for s in skills["skills"]}
+    scope = team_members(account, session)
+    people = [
+        e
+        for e in scope
+        if (not department or e["department"] == department) and (not role or e["role"] == role)
+    ]
+    grouped, conns = by_employee(history), connections_for(session)
+    discussed = {
+        a.target
+        for a in session.exec(select(Audit).where(Audit.action == "signal_discussed")).all()
+    }
+    rows, gap_counts, insights = [], {}, []
+    for e in people:
+        eid = e["employee_id"]
+        facts = employee_facts(e, grouped.get(eid, []), events, skills, as_of)
+        support, growth = support_priority(facts), growth_readiness(facts)
+        for gap in facts["gaps"]:
+            if gap["gap"]:
+                gap_counts[gap["name"]] = gap_counts.get(gap["name"], 0) + 1
+        digest = integrations.digest(
+            e, conns.get(eid, {}), facts["gaps"], skill_names, role_skills(skills, e)
+        )
+        if digest["signal"]:
+            signal = digest["signal"]
+            insights.append(
+                {
+                    "employee_id": eid,
+                    "full_name": e["full_name"],
+                    "role": e["role"],
+                    "title": signal["title"],
+                    "text": signal["text"],
+                    "sufficient": signal["sufficient"],
+                    "evidence": len(signal["evidence"]),
+                    "sources": sorted({x["source"] for x in signal["evidence"]}),
+                    "discussed": eid in discussed,
+                }
+            )
+        rows.append(
+            {
+                "employee_id": eid,
+                "full_name": e["full_name"],
+                "department": e["department"],
+                "role": e["role"],
+                "grade": e["grade"],
+                "target": facts["target"],
+                "readiness": facts["readiness"],
+                "coverage": facts["coverage"],
+                "gaps": sum(g["gap"] > 0 for g in facts["gaps"]),
+                "critical_gaps": sum(g["gap"] > 0 and g["critical"] for g in facts["gaps"]),
+                "priority": support,
+                "growth": growth,
+                "sources": {k: v["status"] for k, v in digest["sources"].items()},
+            }
+        )
+    records = [r for e in people for r in grouped.get(e["employee_id"], [])]
+    count = lambda status: sum(r["status"] == status for r in records)  # noqa: E731
+    pending = session.exec(select(Completion).where(Completion.status == "pending")).all()
+    visible = {e["employee_id"]: e["full_name"] for e in scope}
+    return {
+        "as_of": as_of,
+        "scope": {
+            "role": account.role,
+            "department": manager_department(account, session)
+            if account.role == "manager"
+            else None,
+            "total": len(scope),
+        },
+        "departments": sorted({e["department"] for e in scope}),
+        "roles": sorted({e["role"] for e in scope}),
+        "metrics": {
+            "employees": len(people),
+            "with_critical_gap": sum(r["critical_gaps"] > 0 for r in rows),
+            "avg_readiness": round(sum(r["readiness"] for r in rows) / len(rows)) if rows else None,
+            "without_goal": sum(not e.get("career_goal") for e in people),
+            "completed": count("completed"),
+            "overdue": count("overdue"),
+        },
+        "priority_counts": {
+            level: sum(r["priority"]["level"] == level for r in rows)
+            for level in ("high", "medium", "planned")
+        },
+        "growth_count": sum(r["growth"]["ready"] for r in rows),
+        "gaps": sorted(
+            [{"name": k, "count": v} for k, v in gap_counts.items()], key=lambda g: -g["count"]
+        )[:7],
+        "activity": {
+            "completed": count("completed"),
+            "voluntary_completed": sum(
+                r["status"] == "completed" and not events[r["event_id"]]["mandatory"]
+                for r in records
+            ),
+            "no_show": count("no_show"),
+            "dropped": count("dropped"),
+            "declined": count("declined"),
+            "in_progress": count("in_progress"),
+        },
+        "sources": {
+            "github": sum(r["sources"]["github"] == "connected" for r in rows),
+            "github_accounts": sum(r["sources"]["github"] != "no_account" for r in rows),
+            "jira": sum(r["sources"]["jira"] == "connected" for r in rows),
+            "none": sum("connected" not in r["sources"].values() for r in rows),
+        },
+        "insights": insights,
+        "employees": rows,
+        # Completion approval stays with HR; managers only see the queue size of their team.
+        "pending": [
+            {
+                **c.model_dump(),
+                "full_name": visible[c.employee_id],
+                "title": events[c.event_id]["title"],
+            }
+            for c in pending
+            if c.employee_id in visible
+        ]
+        if account.role == "hr"
+        else [],
+    }
+
+
+@app.get("/api/team/employees/{eid}")
+def team_card(eid: str, account=Depends(staff_account), session: Session = Depends(get_session)):
+    employee = employee_document(eid, account, session).payload
+    skills, events, history = bundle(session)
+    as_of = skills["meta"]["as_of_date"]
+    skill_names = {s["skill_id"]: s for s in skills["skills"]}
+    own = [r for r in history if r["employee_id"] == eid]
+    facts = employee_facts(employee, own, events, skills, as_of)
+    pending = {
+        c.event_id
+        for c in session.exec(
+            select(Completion).where(Completion.employee_id == eid, Completion.status == "pending")
+        ).all()
+    }
+    target = facts["target"]
+    oriented = {
+        **employee,
+        "career_goal": {"target_role": target["role"], "target_grade": target["grade"]},
+    }
+    recs = recommendations(oriented, facts["levels"], facts["gaps"], events, own, as_of, pending)
+    manager = session.get(Document, f"employee:{employee.get('manager_id')}")
+    discussed = session.exec(
+        select(Audit).where(Audit.action == "signal_discussed", Audit.target == eid)
+    ).first()
+    return {
+        "employee": {
+            k: employee[k]
+            for k in ("employee_id", "full_name", "department", "role", "grade", "last_review_date")
+        },
+        "manager": manager.payload["full_name"] if manager else None,
+        "target": target,
+        "readiness": facts["readiness"],
+        "coverage": facts["coverage"],
+        "priority": support_priority(facts),
+        "growth": growth_readiness(facts),
+        "gaps": sorted(facts["gaps"], key=lambda g: (-g["critical"], -g["gap"], g["name"])),
+        "recommendations": [
+            {
+                k: r[k]
+                for k in (
+                    "event_id",
+                    "title",
+                    "format",
+                    "duration_hours",
+                    "next_session",
+                    "benefits",
+                )
+            }
+            for r in recs
+        ],
+        "open_learning": [
+            {
+                **r,
+                "title": events[r["event_id"]]["title"],
+                "mandatory": events[r["event_id"]]["mandatory"],
+            }
+            for r in latest_by_event(own)
+            if r["status"] != "completed"
+            and (events[r["event_id"]]["mandatory"] or r["status"] == "in_progress")
+        ],
+        "integrations": integrations.digest(
+            employee,
+            connections_for(session, eid).get(eid, {}),
+            facts["gaps"],
+            skill_names,
+            role_skills(skills, employee),
+        ),
+        "discussed": bool(discussed),
+    }
+
+
+@app.post("/api/team/employees/{eid}/discuss")
+def mark_discussed(
+    eid: str, account=Depends(staff_account), session: Session = Depends(get_session)
+):
+    employee_document(eid, account, session)
+    exists = session.exec(
+        select(Audit).where(Audit.action == "signal_discussed", Audit.target == eid)
+    ).first()
+    if not exists:
+        session.add(Audit(actor=account.username, action="signal_discussed", target=eid))
+        session.commit()
+    return {"ok": True}
+
+
+def integration_view(employee, account, session):
+    skills, events, history = bundle(session)
+    as_of = skills["meta"]["as_of_date"]
+    eid = employee["employee_id"]
+    levels = current_skills(
+        employee, [r for r in history if r["employee_id"] == eid], events, as_of
+    )
+    target, _ = target_profile(employee, skills["role_profiles"])
+    skill_names = {s["skill_id"]: s for s in skills["skills"]}
+    gaps = profile_gaps(target, levels, skill_names) if target else []
+    digest = integrations.digest(
+        employee,
+        connections_for(session, eid).get(eid, {}),
+        gaps,
+        skill_names,
+        role_skills(skills, employee),
+    )
+    return {
+        "can_manage": account.employee_id == eid,
+        "period": integrations.PERIOD_LABEL,
+        "sources": {
+            source: {
+                **digest["sources"][source],
+                "available": integrations.available(employee, source),
+                "choices": integrations.resources(employee, source),
+            }
+            for source in integrations.SOURCES
+        },
+        "signal": digest["signal"],
+    }
+
+
+@app.get("/api/employees/{eid}/integrations")
+def employee_integrations(
+    eid: str, account=Depends(current_account), session: Session = Depends(get_session)
+):
+    return integration_view(employee_document(eid, account, session).payload, account, session)
+
+
+def own_integration(eid, source, account, session):
+    if account.employee_id != eid:
+        raise HTTPException(403, "Подключениями управляет только сам сотрудник")
+    if source not in integrations.SOURCES:
+        raise HTTPException(404, "Неизвестный источник")
+    return employee_document(eid, account, session).payload
+
+
+@app.put("/api/employees/{eid}/integrations/{source}")
+def connect_integration(
+    eid: str,
+    source: str,
+    body: ConnectRequest,
+    account=Depends(current_account),
+    session: Session = Depends(get_session),
+):
+    employee = own_integration(eid, source, account, session)
+    if not integrations.available(employee, source):
+        raise HTTPException(422, "У сотрудника нет аккаунта GitHub — подключать нечего")
+    chosen = list(dict.fromkeys(body.resources))
+    if set(chosen) - set(integrations.resources(employee, source)):
+        raise HTTPException(422, "Можно выбрать только предложенные демо-ресурсы")
+    item = session.exec(
+        select(Connection).where(Connection.employee_id == eid, Connection.source == source)
+    ).first() or Connection(employee_id=eid, source=source, resources=chosen)
+    item.resources, item.consent_at, item.synced_at = chosen, now(), now()
+    session.add(item)
+    session.add(Audit(actor=account.username, action=f"{source}_connected", target=eid))
+    session.commit()
+    return integration_view(employee, account, session)
+
+
+@app.delete("/api/employees/{eid}/integrations/{source}")
+def disconnect_integration(
+    eid: str, source: str, account=Depends(current_account), session: Session = Depends(get_session)
+):
+    employee = own_integration(eid, source, account, session)
+    item = session.exec(
+        select(Connection).where(Connection.employee_id == eid, Connection.source == source)
+    ).first()
+    if item:
+        session.delete(item)
+        session.add(Audit(actor=account.username, action=f"{source}_disconnected", target=eid))
+        session.commit()
+    return integration_view(employee, account, session)
 
 
 if settings.frontend_dir.is_dir():

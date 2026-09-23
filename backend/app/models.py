@@ -38,6 +38,18 @@ class Completion(SQLModel, table=True):
     review_note: str = ""
 
 
+class Connection(SQLModel, table=True):
+    """Demo GitHub/Jira access an employee granted with explicit consent."""
+
+    __table_args__ = (UniqueConstraint("employee_id", "source"),)
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    employee_id: str = Field(index=True)
+    source: str
+    resources: list[str] = Field(sa_column=Column(JSON, nullable=False))
+    consent_at: str = Field(default_factory=now)
+    synced_at: str = Field(default_factory=now)
+
+
 class Audit(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     actor: str

@@ -25,6 +25,8 @@ class Employee(BaseModel):
     career_goal: Goal | None = None
     skills: dict[str, Level]
     last_review_date: date
+    # Optional extension of the dataset schema; empty means the synthetic rule decides.
+    github_login: str | None = Field(default=None, max_length=80)
 
 
 class HistoryRow(BaseModel):
@@ -57,6 +59,11 @@ class CompletionRequest(BaseModel):
     event_id: str
     completed_at: date
     evidence: str = Field(min_length=8, max_length=1500)
+
+
+class ConnectRequest(BaseModel):
+    resources: list[str] = Field(min_length=1, max_length=5)
+    consent: Literal[True]
 
 
 class Review(BaseModel):

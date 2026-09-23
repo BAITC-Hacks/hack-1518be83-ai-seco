@@ -86,8 +86,14 @@ def client(data):
     SQLModel.metadata.create_all(engine)
     employee, skills, events = data
     other = {**copy.deepcopy(employee), "employee_id": "E2", "full_name": "Other Employee"}
+    outside = {
+        **copy.deepcopy(employee),
+        "employee_id": "E7",
+        "full_name": "Outside Employee",
+        "department": "Payments",
+    }
     with Session(engine) as session:
-        for e in [employee, other]:
+        for e in [employee, other, outside]:
             session.add(Document(id=f"employee:{e['employee_id']}", kind="employee", payload=e))
         session.add(Document(id="catalog:skills", kind="catalog", payload=skills))
         session.add(
@@ -98,6 +104,9 @@ def client(data):
             Account(username="employee", password_hash=hashed, role="employee", employee_id="E1")
         )
         session.add(Account(username="hr", password_hash=hashed, role="hr"))
+        session.add(
+            Account(username="manager", password_hash=hashed, role="manager", employee_id="E2")
+        )
         session.commit()
 
     def get_test_session():

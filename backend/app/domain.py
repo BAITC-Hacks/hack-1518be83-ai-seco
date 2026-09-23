@@ -25,20 +25,38 @@ def current_skills(employee, history, events, as_of):
     return levels
 
 
+GRADES = ["Junior", "Middle", "Senior", "Lead"]
+
+
+def find_profile(role_profiles, role, grade):
+    return next((p for p in role_profiles if p["role"] == role and p["grade"] == grade), None)
+
+
+def target_profile(employee, role_profiles):
+    """Chosen goal, otherwise the next grade in the current role as an orientation.
+
+    The orientation is used for team analytics only and is always flagged as not chosen.
+    """
+    goal = employee.get("career_goal")
+    if goal:
+        profile = find_profile(role_profiles, goal["target_role"], goal["target_grade"])
+        if profile:
+            return profile, True
+    grade = GRADES[min(GRADES.index(employee["grade"]) + 1, len(GRADES) - 1)]
+    return find_profile(role_profiles, employee["role"], grade), False
+
+
 def gap_rows(employee, levels, role_profiles, skills):
     goal = employee.get("career_goal")
     if not goal:
         return []
-    profile = next(
-        (
-            p
-            for p in role_profiles
-            if p["role"] == goal["target_role"] and p["grade"] == goal["target_grade"]
-        ),
-        None,
-    )
+    profile = find_profile(role_profiles, goal["target_role"], goal["target_grade"])
     if profile is None:
         return []
+    return profile_gaps(profile, levels, skills)
+
+
+def profile_gaps(profile, levels, skills):
     rows = [
         {
             "skill_id": sid,
