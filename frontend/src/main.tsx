@@ -678,10 +678,12 @@ function ProfileView({
               <div>
                 <strong>{h.title}</strong>
                 <small>
-                  {dateText(h.date)}
-                  {h.format === "self_paced"
-                    ? " · дата зачисления в исходной истории"
-                    : ""}
+                  {dateText(h.completed_at ?? h.date)}
+                  {h.completed_at
+                    ? " · дата завершения"
+                    : h.format === "self_paced"
+                      ? " · дата зачисления в исходной истории"
+                      : ""}
                 </small>
               </div>
               <span className={`status ${h.status}`}>{statuses[h.status]}</span>

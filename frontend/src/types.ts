@@ -38,6 +38,7 @@ export type History = {
   record_id: string;
   event_id: string;
   date: string;
+  completed_at?: string;
   title: string;
   status: string;
   format: string;

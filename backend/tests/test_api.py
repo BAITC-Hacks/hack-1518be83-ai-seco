@@ -74,6 +74,9 @@ def test_completion_requires_hr_and_is_idempotent(client):
     profile = client.get("/api/employees/E1").json()
     assert profile["levels"]["SK_SYSTEM"] == before + 1
     assert len(profile["history"]) == 1
+    assert profile["history"][0]["completed_at"] == body["completed_at"]
+    assert profile["history"][0]["date"] == body["completed_at"]
+    assert profile["history"][0]["source"] == "hr_confirmed"
     assert client.post("/api/employees/E1/completions", json=body).status_code == 409
 
 
