@@ -140,3 +140,6 @@ if __name__ == "__main__":
         seed(session)
         seed_demo_manager(session)
         seed_demo_expert(session)
+        from app.rewards import seed_demo_rewards
+
+        seed_demo_rewards(session)

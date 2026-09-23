@@ -114,6 +114,7 @@ export type Catalog = {
     critical_skills: string[];
   }[];
   skills: { skill_id: string; name: string }[];
+  events: { event_id: string; title: string; mandatory: boolean }[];
 };
 export type HRRow = {
   employee_id: string;
@@ -317,4 +318,42 @@ export type Reassessment = {
     delta: number;
     evidence: string | null;
   }[];
+};
+export type RewardClaim = {
+  claim_id: string;
+  employee_id: string;
+  full_name: string;
+  reward_id: string;
+  reward_title: string;
+  criterion_version: number;
+  facts: string[];
+  comment: string;
+  status:
+    | "pending"
+    | "approved"
+    | "needs_changes"
+    | "rejected"
+    | "cancelled"
+    | "issued";
+  created_at: string;
+  history: {
+    status: RewardClaim["status"];
+    actor: string;
+    note: string;
+    at: string;
+  }[];
+};
+export type RewardItem = {
+  reward_id: string;
+  title: string;
+  description: string;
+  kind: string;
+  criterion: Record<string, string | number>;
+  active: boolean;
+  version: number;
+  rule: string;
+  eligible: boolean;
+  facts: string[];
+  progress: string;
+  claim: RewardClaim | null;
 };

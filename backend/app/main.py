@@ -33,6 +33,7 @@ from app.onboarding import (
 )
 from app.reassessment import effective_employee
 from app.reassessment import router as reassessment_router
+from app.rewards import router as rewards_router
 from app.schemas import CompletionRequest, Employee, Goal, Login, Review
 from app.security import create_token, current_account, hr_account, password_hash, readable_employee
 from app.seed import bundle, validate_import
@@ -46,6 +47,7 @@ app.include_router(connectors_router)
 app.include_router(team_router)
 app.include_router(catalog_router)
 app.include_router(reassessment_router)
+app.include_router(rewards_router)
 
 
 @app.middleware("http")

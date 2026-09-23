@@ -17,6 +17,7 @@ import {
   Flag,
   GitBranch,
   GitPullRequest,
+  Gift,
   GraduationCap,
   LayoutDashboard,
   Link2,
@@ -42,6 +43,7 @@ import { EvidenceHRPanel, WorkEvidencePanel } from "./WorkEvidence";
 import { ActivitiesPanel, AIBriefing, NoStepPanel } from "./HRInsights";
 import { CatalogPage, QuizPanel } from "./Catalog";
 import { ReassessmentPanel } from "./Reassessment";
+import { HRRewardsPage, RewardsPage } from "./Rewards";
 import type { Catalog, Completion, Overview, Profile, User } from "./types";
 import "./style.css";
 
@@ -369,7 +371,10 @@ function App() {
             ? [
                 ["team", Users, isHR ? "Команда" : "Мой отдел"],
                 ...(isHR
-                  ? [["catalog", GraduationCap, "Каталог и тесты"]]
+                  ? [
+                      ["catalog", GraduationCap, "Каталог и тесты"],
+                      ["rewards", Gift, "Награды"],
+                    ]
                   : []),
                 ["connections", Link2, "Интеграции"],
               ]
@@ -379,6 +384,7 @@ function App() {
                 ["learning", GraduationCap, "Моё обучение"],
                 ["history", BookOpen, "История развития"],
                 ["evidence", GitPullRequest, "Рабочие примеры"],
+                ["rewards", Gift, "Награды"],
                 ["connections", Link2, "Интеграции"],
               ]
           ).map(([key, Icon, label]) => (
@@ -453,6 +459,10 @@ function App() {
               ) : (
                 <Connections />
               )
+            ) : tab === "rewards" && isHR ? (
+              <HRRewardsPage catalog={catalog.data} />
+            ) : tab === "rewards" && !isLead && user.employee_id ? (
+              <RewardsPage eid={user.employee_id} />
             ) : tab === "catalog" && isHR ? (
               <CatalogPage catalog={catalog.data} username={user.username} />
             ) : isLead && !selected ? (
