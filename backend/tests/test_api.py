@@ -33,8 +33,20 @@ def test_csrf_origin(client):
     )
 
 
-def test_goal_change_and_unknown_role(client):
+def test_employee_cannot_change_or_clear_goal(client):
+    target = {"target_role": "Backend Engineer", "target_grade": "Lead"}
+    assert client.put("/api/employees/E1/goal", json=target).status_code == 401
     sign_in(client)
+    before = client.get("/api/employees/E1").json()["employee"]
+    for eid in ["E1", "E2"]:
+        for body in [target, None]:
+            assert client.put(f"/api/employees/{eid}/goal", json=body).status_code == 403
+    assert client.get("/api/employees/E1").json()["employee"] == before
+
+
+def test_hr_goal_change_and_unknown_role(client):
+    sign_in(client, "hr")
+    before = client.get("/api/employees/E1").json()
     assert (
         client.put(
             "/api/employees/E1/goal", json={"target_role": "Invented", "target_grade": "Lead"}
@@ -51,6 +63,10 @@ def test_goal_change_and_unknown_role(client):
     assert (
         client.get("/api/employees/E1").json()["employee"]["career_goal"]["target_grade"] == "Lead"
     )
+    after = client.get("/api/employees/E1").json()
+    for field in ["role", "grade", "skills"]:
+        assert after["employee"][field] == before["employee"][field]
+    assert after["levels"] == before["levels"]
 
 
 def test_completion_requires_hr_and_is_idempotent(client):
@@ -191,9 +207,15 @@ def test_ai_mock_success_cache_limit_and_fallback(client, monkeypatch):
     assert first["mode"] == "ai" and not first["cached"]
     assert client.post("/api/employees/E1/ai-explanation").json()["cached"]
     assert len(calls) == 1
-    client.put(
-        "/api/employees/E1/goal", json={"target_role": "Backend Engineer", "target_grade": "Lead"}
+    sign_in(client, "hr")
+    assert (
+        client.put(
+            "/api/employees/E1/goal",
+            json={"target_role": "Backend Engineer", "target_grade": "Lead"},
+        ).status_code
+        == 200
     )
+    sign_in(client)
     assert client.post("/api/employees/E1/ai-explanation").json()["mode"] == "rules"
 
 

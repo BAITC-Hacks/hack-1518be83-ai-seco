@@ -1,0 +1,463 @@
+{
+ "meta": {
+  "synthetic": true,
+  "version": "2026-09-23",
+  "as_of_date": "2026-10-01",
+  "note": "Вымышленные задачи, PR и страницы для демонстрации. Не выгрузка реальных систем; ссылки указывают на несуществующий домен example.invalid."
+ },
+ "criteria": [
+  {
+   "criterion_id": "BE_ACCESS_CHECKS",
+   "roles": [
+    "Backend Engineer"
+   ],
+   "skill_id": "SK_APP_SECURITY",
+   "title": "Проверки доступа и валидация входных данных",
+   "description": "Эндпоинт проверяет владельца ресурса, подпись и границы параметров до выполнения операции."
+  },
+  {
+   "criterion_id": "BE_ERROR_CONTRACT",
+   "roles": [
+    "Backend Engineer"
+   ],
+   "skill_id": "SK_API_DESIGN",
+   "title": "Обработка ошибок и контракт API",
+   "description": "Ошибки внешних сервисов, повторы и конфликты описаны в контракте и возвращают предсказуемые коды."
+  },
+  {
+   "criterion_id": "BE_OBSERVABILITY",
+   "roles": [
+    "Backend Engineer"
+   ],
+   "skill_id": "SK_OBSERVABILITY",
+   "title": "Логи, метрики и трассировка",
+   "description": "По логам и метрикам можно восстановить путь запроса и причину сбоя."
+  },
+  {
+   "criterion_id": "BE_BOUNDARY_TESTS",
+   "roles": [
+    "Backend Engineer"
+   ],
+   "skill_id": "SK_API_TESTING",
+   "title": "Тесты граничных случаев",
+   "description": "Автотесты покрывают граничные значения и негативные сценарии API."
+  },
+  {
+   "criterion_id": "PM_FAILURE_SCENARIOS",
+   "roles": [
+    "Product Manager"
+   ],
+   "skill_id": "SK_REQUIREMENTS",
+   "title": "Сценарии отказа в постановке",
+   "description": "Постановка описывает поведение при недоступности зависимостей, ошибках и исключениях."
+  },
+  {
+   "criterion_id": "PM_ACCEPTANCE",
+   "roles": [
+    "Product Manager"
+   ],
+   "skill_id": "SK_REQUIREMENTS",
+   "title": "Проверяемые критерии приёмки",
+   "description": "Критерии приёмки измеримы и однозначно проверяются тестом."
+  },
+  {
+   "criterion_id": "PM_PROBLEM_FRAMING",
+   "roles": [
+    "Product Manager"
+   ],
+   "skill_id": "SK_PRODUCT_DISCOVERY",
+   "title": "Формулировка проблемы и метрики успеха",
+   "description": "Документ связывает проблему клиента, гипотезу и метрику успеха."
+  }
+ ],
+ "identities": [
+  {
+   "source": "github",
+   "external_id": "arman-z",
+   "employee_id": "E0002",
+   "confirmed_by": "hr"
+  },
+  {
+   "source": "github",
+   "external_id": "togzhan-y",
+   "employee_id": "E0005",
+   "confirmed_by": "hr"
+  },
+  {
+   "source": "confluence",
+   "external_id": "acc-zhanna-a",
+   "employee_id": "E0116",
+   "confirmed_by": "hr"
+  }
+ ],
+ "tasks": [
+  {
+   "task_id": "T-PAY-101",
+   "source": "jira",
+   "key": "PAY-101",
+   "title": "Эндпоинт лимитов переводов",
+   "employee_id": "E0002",
+   "acceptance_criteria": [
+    "Клиент видит только лимиты своих счетов",
+    "Ответ до 300 мс при p95"
+   ],
+   "estimate_hours": 16,
+   "worklogs": [
+    {
+     "date": "2026-07-28",
+     "hours": 6,
+     "kind": "implementation"
+    },
+    {
+     "date": "2026-07-29",
+     "hours": 5,
+     "kind": "testing"
+    },
+    {
+     "date": "2026-07-30",
+     "hours": 3,
+     "kind": "fixes"
+    }
+   ]
+  },
+  {
+   "task_id": "T-PAY-114",
+   "source": "jira",
+   "key": "PAY-114",
+   "title": "Повтор экспорта выписки",
+   "employee_id": "E0002",
+   "acceptance_criteria": [
+    "Повторный запрос не создаёт дубликат выгрузки"
+   ],
+   "estimate_hours": 12,
+   "worklogs": [
+    {
+     "date": "2026-08-12",
+     "hours": 6,
+     "kind": "implementation"
+    },
+    {
+     "date": "2026-08-13",
+     "hours": 16,
+     "kind": "blocked"
+    },
+    {
+     "date": "2026-08-15",
+     "hours": 4,
+     "kind": "fixes"
+    }
+   ]
+  },
+  {
+   "task_id": "T-PAY-127",
+   "source": "jira",
+   "key": "PAY-127",
+   "title": "Приём webhook от платёжного партнёра",
+   "employee_id": "E0005",
+   "acceptance_criteria": [
+    "Webhook без валидной подписи отклоняется"
+   ],
+   "estimate_hours": 20,
+   "worklogs": [
+    {
+     "date": "2026-09-02",
+     "hours": 8,
+     "kind": "implementation"
+    },
+    {
+     "date": "2026-09-03",
+     "hours": 6,
+     "kind": "review"
+    }
+   ]
+  },
+  {
+   "task_id": "T-PAY-133",
+   "source": "jira",
+   "key": "PAY-133",
+   "title": "Миграция справочника банков",
+   "employee_id": "E0002",
+   "acceptance_criteria": [],
+   "estimate_hours": 6,
+   "worklogs": [
+    {
+     "date": "2026-09-10",
+     "hours": 4,
+     "kind": "implementation"
+    }
+   ]
+  },
+  {
+   "task_id": "T-CARD-210",
+   "source": "jira",
+   "key": "CARD-210",
+   "title": "PRD: мгновенный выпуск виртуальной карты",
+   "employee_id": "E0116",
+   "acceptance_criteria": [
+    "Карта выпускается быстро и удобно"
+   ],
+   "estimate_hours": 10,
+   "worklogs": [
+    {
+     "date": "2026-07-14",
+     "hours": 6,
+     "kind": "analysis"
+    },
+    {
+     "date": "2026-07-16",
+     "hours": 3,
+     "kind": "communication"
+    }
+   ]
+  },
+  {
+   "task_id": "T-CARD-233",
+   "source": "jira",
+   "key": "CARD-233",
+   "title": "PRD: лимиты по виртуальной карте",
+   "employee_id": "E0116",
+   "acceptance_criteria": [
+    "Клиент меняет лимит в приложении, изменение применяется до 5 секунд"
+   ],
+   "estimate_hours": 8,
+   "worklogs": [
+    {
+     "date": "2026-08-05",
+     "hours": 5,
+     "kind": "analysis"
+    }
+   ]
+  },
+  {
+   "task_id": "T-CARD-241",
+   "source": "jira",
+   "key": "CARD-241",
+   "title": "PRD: блокировка карты из чата поддержки",
+   "employee_id": "E0116",
+   "acceptance_criteria": [
+    "Блокировка выполняется до 3 секунд, клиент получает уведомление"
+   ],
+   "estimate_hours": 6,
+   "worklogs": [
+    {
+     "date": "2026-09-01",
+     "hours": 4,
+     "kind": "analysis"
+    },
+    {
+     "date": "2026-09-02",
+     "hours": 8,
+     "kind": "blocked"
+    }
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "artifact_id": "GH-PR-42",
+   "source": "github",
+   "kind": "pull_request",
+   "task_id": "T-PAY-101",
+   "author_external_id": "arman-z",
+   "co_author_external_ids": [],
+   "title": "PR #42 · limits endpoint",
+   "url": "https://git.example.invalid/payments/pull/42",
+   "version": "a1c9e02",
+   "created_at": "2026-07-30",
+   "excerpt": "GET /accounts/{id}/limits → LimitsService.fetch(id); timeout → HTTP 500",
+   "findings": [
+    {
+     "finding_id": "F-42-1",
+     "criterion_id": "BE_ACCESS_CHECKS",
+     "reviewer": "reviewer-a",
+     "text": "Эндпоинт не проверяет, что счёт принадлежит клиенту из токена.",
+     "outcome": "fixed"
+    },
+    {
+     "finding_id": "F-42-2",
+     "criterion_id": "BE_ERROR_CONTRACT",
+     "reviewer": "reviewer-a",
+     "text": "Таймаут сервиса лимитов возвращает 500 без кода ошибки в контракте.",
+     "outcome": "open"
+    }
+   ],
+   "strengths": [
+    "BE_BOUNDARY_TESTS"
+   ]
+  },
+  {
+   "artifact_id": "GH-PR-57",
+   "source": "github",
+   "kind": "pull_request",
+   "task_id": "T-PAY-114",
+   "author_external_id": "arman-z",
+   "co_author_external_ids": [],
+   "title": "PR #57 · statement export retry",
+   "url": "https://git.example.invalid/payments/pull/57",
+   "version": "7f3b1d4",
+   "created_at": "2026-08-15",
+   "excerpt": "POST /statements/export — retry on timeout without idempotency key",
+   "findings": [
+    {
+     "finding_id": "F-57-1",
+     "criterion_id": "BE_ACCESS_CHECKS",
+     "reviewer": "reviewer-b",
+     "text": "page_size не ограничен: можно выгрузить всю историю одним запросом.",
+     "outcome": "fixed"
+    },
+    {
+     "finding_id": "F-57-2",
+     "criterion_id": "BE_ACCESS_CHECKS",
+     "reviewer": "reviewer-b",
+     "text": "То же ограничение не проверено во втором обработчике.",
+     "outcome": "fixed"
+    },
+    {
+     "finding_id": "F-57-3",
+     "criterion_id": "BE_ERROR_CONTRACT",
+     "reviewer": "reviewer-b",
+     "text": "Повтор запроса создаёт дубликат; в контракте нет 409 и ключа идемпотентности.",
+     "outcome": "open"
+    },
+    {
+     "finding_id": "F-57-4",
+     "criterion_id": "BE_OBSERVABILITY",
+     "reviewer": "reviewer-b",
+     "text": "В логах ретраев нет correlation id.",
+     "outcome": "open"
+    }
+   ],
+   "strengths": [
+    "BE_BOUNDARY_TESTS"
+   ]
+  },
+  {
+   "artifact_id": "GH-PR-63",
+   "source": "github",
+   "kind": "pull_request",
+   "task_id": "T-PAY-127",
+   "author_external_id": "togzhan-y",
+   "co_author_external_ids": [
+    "arman-z"
+   ],
+   "title": "PR #63 · partner webhook",
+   "url": "https://git.example.invalid/payments/pull/63",
+   "version": "c44e8a0",
+   "created_at": "2026-09-03",
+   "excerpt": "POST /webhooks/partner — payload parsed before signature check",
+   "findings": [
+    {
+     "finding_id": "F-63-1",
+     "criterion_id": "BE_ACCESS_CHECKS",
+     "reviewer": "reviewer-a",
+     "text": "Webhook принимается до проверки подписи партнёра.",
+     "outcome": "open"
+    }
+   ],
+   "strengths": []
+  },
+  {
+   "artifact_id": "GH-PR-70",
+   "source": "github",
+   "kind": "pull_request",
+   "task_id": "T-PAY-133",
+   "author_external_id": "ext-contractor-7",
+   "co_author_external_ids": [],
+   "title": "PR #70 · bank directory migration",
+   "url": "https://git.example.invalid/payments/pull/70",
+   "version": "0be1f77",
+   "created_at": "2026-09-10",
+   "excerpt": "Migration 0042_bank_directory",
+   "findings": [
+    {
+     "finding_id": "F-70-1",
+     "criterion_id": "BE_ERROR_CONTRACT",
+     "reviewer": "reviewer-b",
+     "text": "Миграция не откатывается при ошибке.",
+     "outcome": "open"
+    }
+   ],
+   "strengths": []
+  },
+  {
+   "artifact_id": "CF-PRD-210",
+   "source": "confluence",
+   "kind": "page",
+   "task_id": "T-CARD-210",
+   "author_external_id": "acc-zhanna-a",
+   "co_author_external_ids": [],
+   "title": "PRD · Виртуальная карта за 1 минуту",
+   "url": "https://wiki.example.invalid/pages/210",
+   "version": "v7",
+   "created_at": "2026-07-16",
+   "excerpt": "Проблема: 38% заявок бросают на шаге ожидания пластика. Метрика: доля выпуска < 60 с.",
+   "findings": [
+    {
+     "finding_id": "F-210-1",
+     "criterion_id": "PM_FAILURE_SCENARIOS",
+     "reviewer": "qa-lead",
+     "text": "Не описано поведение при недоступности скоринга.",
+     "outcome": "open"
+    },
+    {
+     "finding_id": "F-210-2",
+     "criterion_id": "PM_ACCEPTANCE",
+     "reviewer": "qa-lead",
+     "text": "Критерий «быстро и удобно» нельзя проверить тестом.",
+     "outcome": "open"
+    }
+   ],
+   "strengths": [
+    "PM_PROBLEM_FRAMING"
+   ]
+  },
+  {
+   "artifact_id": "CF-PRD-233",
+   "source": "confluence",
+   "kind": "page",
+   "task_id": "T-CARD-233",
+   "author_external_id": "acc-zhanna-a",
+   "co_author_external_ids": [],
+   "title": "PRD · Лимиты виртуальной карты",
+   "url": "https://wiki.example.invalid/pages/233",
+   "version": "v4",
+   "created_at": "2026-08-06",
+   "excerpt": "Гипотеза: самостоятельная смена лимита снизит обращения в поддержку на 15%.",
+   "findings": [
+    {
+     "finding_id": "F-233-1",
+     "criterion_id": "PM_FAILURE_SCENARIOS",
+     "reviewer": "backend-lead",
+     "text": "Нет сценария, если процессинг не подтвердил новый лимит.",
+     "outcome": "open"
+    }
+   ],
+   "strengths": [
+    "PM_PROBLEM_FRAMING"
+   ]
+  },
+  {
+   "artifact_id": "CF-PRD-241",
+   "source": "confluence",
+   "kind": "page",
+   "task_id": "T-CARD-241",
+   "author_external_id": "acc-zhanna-a",
+   "co_author_external_ids": [],
+   "title": "PRD · Блокировка карты из чата",
+   "url": "https://wiki.example.invalid/pages/241",
+   "version": "v3",
+   "created_at": "2026-09-02",
+   "excerpt": "Сценарии отказа — см. связанный документ «Runbook блокировки».",
+   "findings": [
+    {
+     "finding_id": "F-241-1",
+     "criterion_id": "PM_FAILURE_SCENARIOS",
+     "reviewer": "qa-lead",
+     "text": "Не видно сценария отказа при недоступности процессинга.",
+     "outcome": "not_applicable"
+    }
+   ],
+   "strengths": []
+  }
+ ]
+}

@@ -476,7 +476,7 @@ main {
 }
 .journey-hero {
   position: relative;
-  overflow: hidden;
+  overflow: clip;
   display: grid;
   grid-template-columns: 1fr 220px;
   gap: 25px;
@@ -1264,6 +1264,68 @@ td:nth-child(4) {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+.modal-wide {
+  max-width: 780px;
+}
+.plain-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 20px;
+}
+.checkbox-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+}
+.checkbox-line input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+.assessment-field {
+  border: 1px solid var(--line);
+  background: #f7faf7;
+  padding: 14px 16px 0;
+  border-radius: 10px;
+  margin: 12px 0;
+}
+.assessment-field textarea {
+  min-height: 72px;
+}
+.onboarding-panel {
+  margin-bottom: 24px;
+}
+.onboarding-panel p,
+.assessment-details p {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.assessment-details {
+  margin: 16px 0;
+}
+.assessment-details summary {
+  cursor: pointer;
+  color: var(--green);
+  font-weight: 600;
+}
+.assessment-details > div {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+@media (max-width: 600px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
 @media (min-width: 1600px) {
   main {
     padding-top: 45px;
@@ -1615,4 +1677,74 @@ td:nth-child(4) {
     scroll-behavior: auto !important;
     transition: none !important;
   }
+}
+.evidence-panel h3 {
+  font-size: 14px;
+  margin: 18px 0 8px;
+}
+.evidence-focus {
+  margin: 12px 0;
+}
+.observation {
+  border: 1px solid var(--line);
+  border-left: 3px solid #d8b56a;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin: 14px 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.observation.strength {
+  border-left-color: #7fb08f;
+}
+.observation header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.observation h3 {
+  margin: 10px 0 4px;
+}
+.evidence-list,
+.limitations {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+.evidence-list li {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+.evidence-list em {
+  color: var(--muted);
+}
+.limitations li {
+  color: #91a093;
+  font-size: 11px;
+}
+.review-note {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--green);
+}
+.inline-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.inline-form input:not([type="file"]) {
+  flex: 1 1 220px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.evidence-block {
+  margin-top: 18px;
+}
+.evidence-block summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--green);
 }

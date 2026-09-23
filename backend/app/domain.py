@@ -77,7 +77,11 @@ def eligible(employee, levels, event, history, as_of):
     return event["event_id"] == "EV_036" or not any(r["status"] == "completed" for r in relevant)
 
 
-def recommendations(employee, levels, gaps, events, history, as_of, pending=()):
+# A skill with an expert-confirmed development area (work evidence) gets this multiplier.
+FOCUS_WEIGHT = 2
+
+
+def recommendations(employee, levels, gaps, events, history, as_of, pending=(), focus=()):
     if not employee.get("career_goal"):
         return []
     gap_map = {row["skill_id"]: row for row in gaps}
@@ -92,7 +96,9 @@ def recommendations(employee, levels, gaps, events, history, as_of, pending=()):
         for sid, row in gap_map.items():
             delta = min(row["gap"], improved.get(sid, 0) - levels.get(sid, 0))
             if delta > 0:
-                weighted += delta * (3 if row["critical"] else 1)
+                weighted += (
+                    delta * (3 if row["critical"] else 1) * (FOCUS_WEIGHT if sid in focus else 1)
+                )
                 benefits.append(
                     {
                         "skill_id": sid,
@@ -100,6 +106,7 @@ def recommendations(employee, levels, gaps, events, history, as_of, pending=()):
                         "from": levels.get(sid, 0),
                         "to": improved[sid],
                         "critical": row["critical"],
+                        "evidence": sid in focus,
                     }
                 )
         if not benefits:
@@ -129,6 +136,13 @@ def recommendations(employee, levels, gaps, events, history, as_of, pending=()):
                         "Есть прирост критичных для роли навыков. "
                         if any(b["critical"] for b in benefits)
                         else "Закрывает дополнительные требования роли. "
+                    )
+                    + (
+                        "Приоритет повышен: эксперт подтвердил по рабочим примерам зону развития — "
+                        + ", ".join(b["name"] for b in benefits if b["evidence"])
+                        + ". "
+                        if any(b["evidence"] for b in benefits)
+                        else ""
                     )
                     + (
                         f"Приоритет снижен с учётом {misses} отказов/пропусков за 180 дней."

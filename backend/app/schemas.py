@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Level = Annotated[int, Field(ge=0, le=5)]
 
@@ -62,3 +62,37 @@ class CompletionRequest(BaseModel):
 class Review(BaseModel):
     decision: Literal["approved", "rejected"]
     note: str = Field(min_length=3, max_length=1000)
+
+
+class NewEmployee(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    employee_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,50}$")
+    full_name: str = Field(min_length=1, max_length=150)
+    department: str = Field(min_length=1, max_length=100)
+    role: str
+    grade: Literal["Junior", "Middle", "Senior", "Lead"]
+    specialization: str = Field(default="", max_length=100)
+    hire_date: date
+    grade_since: date | None = None
+    manager_id: str | None = None
+    work_format: Literal["office", "hybrid", "remote"]
+    preferred_language: Literal["kk", "ru", "en"]
+    create_account: bool = False
+
+
+class SkillRating(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    skill_id: str
+    level: int = Field(ge=0, le=5, strict=True)
+    evidence: str = Field(min_length=8, max_length=1000)
+
+
+class InitialAssessment(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    assessed_on: date
+    method: Literal["interview", "practical_task", "portfolio", "combined"]
+    ratings: list[SkillRating] = Field(min_length=1, max_length=60)
+    note: str = Field(min_length=8, max_length=1500)

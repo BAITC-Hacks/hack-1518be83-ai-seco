@@ -17,12 +17,25 @@ from app import ai
 from app.config import settings
 from app.db import get_session
 from app.domain import current_skills, gap_rows, readiness, recommendations
+from app.evidence import confirmed_focus
+from app.evidence import router as evidence_router
 from app.models import AIBudget, AICache, Audit, Completion, Document, now
+from app.onboarding import (
+    elapsed_months,
+    needs_assessment,
+    onboarding_data,
+    profile_readiness,
+)
+from app.onboarding import (
+    router as onboarding_router,
+)
 from app.schemas import CompletionRequest, Employee, Goal, Login, Review
 from app.security import create_token, current_account, hr_account, password_hash
 from app.seed import bundle, validate_import
 
 app = FastAPI(title="Career Quest", version="0.1.0")
+app.include_router(onboarding_router)
+app.include_router(evidence_router)
 
 
 @app.middleware("http")
@@ -83,6 +96,7 @@ def catalog(account=Depends(current_account), session: Session = Depends(get_ses
     return {
         "as_of": skills["meta"]["as_of_date"],
         "skills": skills["skills"],
+        "proficiency_scale": skills.get("proficiency_scale", {}),
         "profiles": skills["role_profiles"],
         "events": list(events.values()),
         "ai_available": bool(settings.ai_enabled and settings.openai_api_key),
@@ -111,12 +125,32 @@ def profile_data(employee, session, data=None):
         select(Completion).where(Completion.employee_id == employee["employee_id"])
     ).all()
     pending = {c.event_id for c in completions if c.status == "pending"}
-    recs = recommendations(employee, levels, gaps, events, history, as_of, pending)
+    metadata = onboarding_data(session, employee["employee_id"])
+    assessed_gaps = [g for g in gaps if g["assessed"]] if metadata else gaps
+    recs = (
+        []
+        if needs_assessment(metadata)
+        else recommendations(
+            employee,
+            levels,
+            assessed_gaps,
+            events,
+            history,
+            as_of,
+            pending,
+            confirmed_focus(session, employee["employee_id"]),
+        )
+    )
+    assessment = (
+        session.get(Document, metadata["assessment_id"])
+        if metadata and metadata.get("assessment_id")
+        else None
+    )
     return {
         "employee": employee,
         "levels": levels,
         "gaps": gaps,
-        "readiness": readiness(gaps),
+        "readiness": profile_readiness(gaps, metadata, readiness),
         "recommendations": recs,
         "history": sorted(
             [
@@ -135,7 +169,12 @@ def profile_data(employee, session, data=None):
         ],
         "as_of": as_of,
         "mode": "rules",
-        "grade_since": None,
+        "grade_since": metadata.get("grade_since") if metadata else None,
+        "grade_months": elapsed_months(metadata["grade_since"], as_of)
+        if metadata and metadata.get("grade_since")
+        else None,
+        "onboarding": metadata,
+        "assessment": assessment.payload if assessment else None,
         "notice": "Расчёт по правилам, не AI. Самостоятельные курсы в исходной истории датированы зачислением; прирост после оценки приблизительный. Готовность не гарантирует повышение.",
     }
 
@@ -149,10 +188,15 @@ def profile(eid: str, account=Depends(current_account), session: Session = Depen
 def goal(
     eid: str,
     body: Goal | None = None,
-    account=Depends(current_account),
+    account=Depends(hr_account),
     session: Session = Depends(get_session),
 ):
     doc = employee_document(eid, account, session)
+    # Refresh under the same employee lock used by initial assessment/history writes.
+    # A concurrent goal change must not overwrite a freshly recorded skill baseline.
+    session.refresh(doc, with_for_update=True)
+    if body and needs_assessment(onboarding_data(session, eid)):
+        raise HTTPException(409, "Сначала проведите первичную оценку навыков")
     skills, _, _ = bundle(session)
     if body and not any(
         p["role"] == body.target_role and p["grade"] == body.target_grade
@@ -174,8 +218,9 @@ def request_completion(
     session: Session = Depends(get_session),
 ):
     doc = employee_document(eid, account, session)
-    # Lock employee to serialize completion/history mutations.
-    session.exec(select(Document).where(Document.id == doc.id).with_for_update()).one()
+    session.refresh(doc, with_for_update=True)
+    if needs_assessment(onboarding_data(session, eid)):
+        raise HTTPException(409, "Сначала HR должен провести первичную оценку навыков")
     skills, events, history = bundle(session)
     event = events.get(body.event_id)
     done_date = body.completed_at.isoformat()
@@ -237,14 +282,19 @@ def overview(account=Depends(hr_account), session: Session = Depends(get_session
     for row in history:
         by_employee.setdefault(row["employee_id"], []).append(row)
     rows, totals = [], {}
+    onboarding = {
+        d.payload["employee_id"]: d.payload
+        for d in session.exec(select(Document).where(Document.kind == "onboarding")).all()
+    }
     for e in employees:
+        metadata = onboarding.get(e["employee_id"])
         own = by_employee.get(e["employee_id"], [])
         levels = current_skills(e, own, events, as_of)
         gaps = gap_rows(
             e, levels, skills["role_profiles"], {s["skill_id"]: s for s in skills["skills"]}
         )
         for gap in gaps:
-            if gap["gap"]:
+            if gap["gap"] and (not metadata or gap["assessed"]):
                 totals[gap["name"]] = totals.get(gap["name"], 0) + 1
         recent = [
             r
@@ -253,11 +303,13 @@ def overview(account=Depends(hr_account), session: Session = Depends(get_session
         ]
         misses = sum(r["status"] == "no_show" for r in recent)
         signals = []
+        if needs_assessment(metadata):
+            signals.append("Нужна первичная оценка навыков")
         if not e["career_goal"]:
             signals.append("Цель пока не выбрана")
         if misses >= 3:
             signals.append(f"{misses} неявки за 90 дней: обсудить расписание")
-        if not recent:
+        if not recent and not needs_assessment(metadata):
             signals.append(
                 "Нет записей о добровольном развитии за 90 дней; уточнить полноту данных"
             )
@@ -268,9 +320,12 @@ def overview(account=Depends(hr_account), session: Session = Depends(get_session
                 "role": e["role"],
                 "grade": e["grade"],
                 "goal": e["career_goal"],
-                "readiness": readiness(gaps),
+                "readiness": profile_readiness(gaps, metadata, readiness),
                 "signals": signals,
-                "grade_since": None,
+                "grade_since": metadata.get("grade_since") if metadata else None,
+                "grade_months": elapsed_months(metadata["grade_since"], as_of)
+                if metadata and metadata.get("grade_since")
+                else None,
             }
         )
     pending = session.exec(select(Completion).where(Completion.status == "pending")).all()

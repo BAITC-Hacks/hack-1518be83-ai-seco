@@ -16,6 +16,7 @@ import {
   Compass,
   Flag,
   GitBranch,
+  GitPullRequest,
   GraduationCap,
   LayoutDashboard,
   Link2,
@@ -30,6 +31,8 @@ import {
   Plus,
 } from "lucide-react";
 import { api, post } from "./api";
+import { AssessmentForm, CreateEmployeeForm } from "./OnboardingForms";
+import { EvidenceHRPanel, WorkEvidencePanel } from "./WorkEvidence";
 import type {
   Catalog,
   Completion,
@@ -74,10 +77,12 @@ function Modal({
   title,
   close,
   children,
+  wide = false,
 }: {
   title: string;
   close: () => void;
   children: ReactNode;
+  wide?: boolean;
 }) {
   const dialog = useRef<HTMLElement>(null);
   const closeRef = useRef(close);
@@ -110,14 +115,14 @@ function Modal({
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
-      previous?.focus();
+      previous?.focus({ preventScroll: true });
     };
   }, []);
   return (
     <div className="overlay" onClick={close}>
       <section
         ref={dialog}
-        className="modal"
+        className={`modal${wide ? " modal-wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -137,6 +142,7 @@ function Modal({
 
 function Login({ onLogin }: { onLogin: (user: User) => void }) {
   const [role, setRole] = useState("employee"),
+    [username, setUsername] = useState("employee"),
     [password, setPassword] = useState("careerquest-demo"),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -145,7 +151,12 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
     setBusy(true);
     setError("");
     try {
-      onLogin(await post<User>("/auth/login", { username: role, password }));
+      onLogin(
+        await post<User>("/auth/login", {
+          username: role === "hr" ? "hr" : username,
+          password,
+        }),
+      );
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -211,8 +222,23 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
               <small>Развитие команды</small>
             </button>
           </div>
+          {role === "employee" && (
+            <label>
+              Логин сотрудника
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                maxLength={80}
+                required
+              />
+              <small>
+                Демо: employee. Для нового профиля — логин, выданный HR.
+              </small>
+            </label>
+          )}
           <label>
-            Пароль демо-аккаунта
+            Пароль
             <input
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -317,6 +343,7 @@ function App() {
                 ["path", Compass, "Мой карьерный путь"],
                 ["skills", LayoutDashboard, "Мои навыки"],
                 ["history", BookOpen, "История развития"],
+                ["evidence", GitPullRequest, "Рабочие примеры"],
                 ["connections", Link2, "Интеграции"],
               ]
           ).map(([key, Icon, label]) => (
@@ -348,10 +375,12 @@ function App() {
             aria-label="Выйти из аккаунта"
             title="Выйти из аккаунта"
           >
-            <span className="avatar">{isHR ? "HR" : "АЗ"}</span>
+            <span className="avatar">
+              {isHR ? "HR" : user.username.slice(0, 2).toUpperCase()}
+            </span>
             <span>
               <strong>{isHR ? "HR-партнёр" : "Мой кабинет"}</strong>
-              <small>Демо-аккаунт</small>
+              <small>{user.username}</small>
             </span>
             <LogOut size={17} />
           </button>
@@ -366,7 +395,9 @@ function App() {
           <div className="topbar-right">
             <span className="demo-dot" />
             Демо · срез {catalog.data?.as_of ?? "…"}
-            <span className="avatar small">{isHR ? "HR" : "АЗ"}</span>
+            <span className="avatar small">
+              {isHR ? "HR" : user.username.slice(0, 2).toUpperCase()}
+            </span>
           </div>
         </header>
         <main>
@@ -385,6 +416,7 @@ function App() {
               />
             ) : eid ? (
               <ProfileView
+                key={eid}
                 eid={eid}
                 catalog={catalog.data}
                 tab={isHR ? "path" : tab}
@@ -420,6 +452,7 @@ function ProfileView({
     queryFn: () => api<Profile>(`/employees/${eid}`),
   });
   const [goalOpen, setGoalOpen] = useState(false),
+    [assessmentOpen, setAssessmentOpen] = useState(false),
     [completion, setCompletion] = useState<{
       event_id: string;
       title: string;
@@ -434,6 +467,7 @@ function ProfileView({
     e = p.employee,
     goal = e.career_goal;
   const completed = p.history.filter((r) => r.status === "completed").length;
+  const needsAssessment = p.onboarding?.status === "pending_assessment";
   async function askAI() {
     setAIBusy(true);
     setAIMessage("");
@@ -478,11 +512,90 @@ function ProfileView({
               : `Ваш следующий шаг, ${e.full_name.split(" ")[0]}`}
           </h1>
           <p>Небольшие действия сегодня. Новые возможности завтра.</p>
+          {p.onboarding && (
+            <p>
+              {e.department}
+              {p.onboarding.specialization
+                ? ` · ${p.onboarding.specialization}`
+                : ""}{" "}
+              · Найм: {dateText(e.hire_date)}
+            </p>
+          )}
         </div>
         <span className="outlined-pill">
           <ShieldCheck size={15} /> Личный профиль
         </span>
       </div>
+      {p.onboarding && (
+        <section className="panel onboarding-panel">
+          <div className="panel-title">
+            <h2>
+              {needsAssessment
+                ? "Первичная оценка навыков"
+                : "Исходная оценка подтверждена"}
+            </h2>
+            <span className="badge">
+              {needsAssessment
+                ? "Шаг 2 из 3"
+                : goal
+                  ? "Маршрут сформирован"
+                  : "Следующий шаг — цель"}
+            </span>
+          </div>
+          {needsAssessment ? (
+            <>
+              <p>
+                Профиль создан, но навыки ещё не оценены. До оценки HR подбор
+                обучения и назначение цели недоступны.
+              </p>
+              {isHR ? (
+                <button
+                  className="primary"
+                  onClick={() => setAssessmentOpen(true)}
+                >
+                  Провести первичную оценку
+                </button>
+              ) : (
+                <p>
+                  HR проведёт интервью или проверит практическое задание и
+                  зафиксирует результат.
+                </p>
+              )}
+            </>
+          ) : (
+            p.assessment && (
+              <>
+                <p>
+                  {dateText(p.assessment.assessed_on)} · Оценил:{" "}
+                  {p.assessment.reviewer} · Навыков:{" "}
+                  {p.assessment.ratings.length}
+                </p>
+                <p>{p.assessment.note}</p>
+                <details className="assessment-details">
+                  <summary>Основания оценок</summary>
+                  {p.assessment.ratings.map((r) => (
+                    <div key={r.skill_id}>
+                      <strong>
+                        {catalog.skills.find((s) => s.skill_id === r.skill_id)
+                          ?.name ?? r.skill_id}{" "}
+                        · {r.level}/5
+                      </strong>
+                      <p>{r.evidence}</p>
+                    </div>
+                  ))}
+                </details>
+                {!goal && (
+                  <p>
+                    {isHR
+                      ? "Теперь задайте карьерную цель ниже — система подберёт подходящие обучения."
+                      : "Оценка готова. Следующий шаг — назначение карьерной цели HR."}
+                  </p>
+                )}
+              </>
+            )
+          )}
+        </section>
+      )}
       {tab === "path" && (
         <>
           <section className="journey-hero">
@@ -493,17 +606,31 @@ function ProfileView({
               <h2>
                 {goal
                   ? `${goal.target_grade} ${goal.target_role}`
-                  : "Каким будет ваш следующий шаг?"}
+                  : "Карьерная цель пока не задана"}
               </h2>
               <p>
                 {goal
                   ? "Мы связали требования роли с вашими навыками. Выбирайте подходящий темп — каждый подтверждённый шаг меняет маршрут."
-                  : "Выберите направление развития. Мы не назначаем цель за вас и не считаем отсутствие цели недостатком."}
+                  : isHR
+                    ? "Обсудите направление развития с сотрудником и задайте цель. Отсутствие цели не считается недостатком."
+                    : "Обсудите направление развития с HR. После назначения цели здесь появится ваш маршрут."}
               </p>
-              <button className="hero-button" onClick={() => setGoalOpen(true)}>
-                {goal ? "Изменить цель" : "Выбрать цель"}
-                <ArrowRight size={16} />
-              </button>
+              {isHR && !needsAssessment ? (
+                <button
+                  className="hero-button"
+                  onClick={() => setGoalOpen(true)}
+                >
+                  {goal ? "Изменить цель" : "Задать цель"}
+                  <ArrowRight size={16} />
+                </button>
+              ) : isHR ? (
+                <p>Сначала проведите первичную оценку навыков.</p>
+              ) : (
+                <p>
+                  Цель задаёт и меняет только HR. Для изменения обратитесь к
+                  HR-партнёру.
+                </p>
+              )}
             </div>
             <div
               className="progress-ring"
@@ -531,6 +658,14 @@ function ProfileView({
               </span>
             </div>
           </section>
+          {p.onboarding && goal && p.gaps.some((g) => !g.assessed) && (
+            <div className="callout">
+              Оценено {p.gaps.filter((g) => g.assessed).length} из{" "}
+              {p.gaps.length} навыков целевой роли. Общий процент пока не
+              рассчитывается. Неизвестные навыки не считаются подтверждёнными
+              дефицитами; рекомендации ниже опираются на оценённые навыки.
+            </div>
+          )}
           <section className="stats-grid">
             <Stat
               label="Подтверждено в истории"
@@ -541,7 +676,11 @@ function ProfileView({
             <Stat
               label="Навыки для цели"
               value={String(p.gaps.filter((g) => g.gap === 0).length)}
-              note={`из ${p.gaps.length} соответствуют требованиям`}
+              note={
+                goal
+                  ? `из ${p.gaps.length} соответствуют требованиям`
+                  : "Цель ещё не задана"
+              }
               icon={<Target />}
             />
             <Stat
@@ -589,9 +728,13 @@ function ProfileView({
           </div>
           {!p.recommendations.length && (
             <div className="empty">
-              {goal
-                ? "Сейчас нет подходящих шагов в каталоге. Обсудите с HR новые обучения или наставничество."
-                : "Выберите карьерную цель — и здесь появятся подходящие активности."}
+              {needsAssessment
+                ? "Обучения появятся после первичной оценки и назначения цели HR."
+                : goal
+                  ? "Сейчас нет подходящих шагов в каталоге. Обсудите с HR новые обучения или наставничество."
+                  : isHR
+                    ? "Задайте карьерную цель сотрудника — и здесь появятся подходящие активности."
+                    : "HR ещё не задал карьерную цель. Обсудите с ним направление развития."}
             </div>
           )}
           <div className="lower-grid">
@@ -627,8 +770,9 @@ function ProfileView({
                 <span>Рост</span>
               </div>
               <small>
-                Анализ Git, Confluence и рабочих задач — следующий этап, пока не
-                подключён.
+                Наблюдения по рабочим примерам (синтетический импорт Git,
+                Confluence, Jira) подтверждает эксперт. Живые подключения —
+                следующий этап.
               </small>
             </section>
           </div>
@@ -638,15 +782,25 @@ function ProfileView({
         <section className="panel">
           <div className="panel-title">
             <h2>Матрица навыков</h2>
-            <button className="secondary" onClick={() => setGoalOpen(true)}>
-              Изменить цель
-            </button>
+            {isHR && !needsAssessment && (
+              <button className="secondary" onClick={() => setGoalOpen(true)}>
+                {goal ? "Изменить цель" : "Задать цель"}
+              </button>
+            )}
           </div>
+          {!isHR && <p>Карьерную цель может изменить только HR.</p>}
           <Skills gaps={p.gaps} />
           {!p.gaps.length && (
-            <p>Сначала выберите цель, чтобы увидеть требования.</p>
+            <p>
+              {isHR
+                ? "Задайте цель, чтобы увидеть требования."
+                : "Требования появятся после назначения цели HR."}
+            </p>
           )}
         </section>
+      )}
+      {(tab === "evidence" || (isHR && tab === "path")) && (
+        <WorkEvidencePanel eid={eid} isHR={isHR} onChanged={refresh} />
       )}
       {(tab === "history" || tab === "path") && (
         <section className="panel history-panel">
@@ -700,9 +854,28 @@ function ProfileView({
         </section>
       )}
       <p className="footnote page-footnote">
-        {p.notice} Длительность на текущем грейде: нет данных.
+        {p.notice} Длительность на текущем грейде:{" "}
+        {p.grade_months !== null
+          ? `${p.grade_months} мес., с ${dateText(p.grade_since!)}`
+          : "нет данных."}
       </p>
-      {goalOpen && (
+      {isHR && assessmentOpen && needsAssessment && (
+        <Modal
+          title="Первичная оценка навыков"
+          wide
+          close={() => setAssessmentOpen(false)}
+        >
+          <AssessmentForm
+            profile={p}
+            catalog={catalog}
+            saved={() => {
+              setAssessmentOpen(false);
+              refresh();
+            }}
+          />
+        </Modal>
+      )}
+      {isHR && goalOpen && !needsAssessment && (
         <GoalModal
           profile={p}
           catalog={catalog}
@@ -801,8 +974,16 @@ function QuestCard({
       <p>{explanation || q.reason}</p>
       <div className="benefits">
         {q.benefits.slice(0, 3).map((b) => (
-          <span key={b.name}>
+          <span
+            key={b.name}
+            title={
+              b.evidence
+                ? "Зона развития подтверждена экспертом по рабочим примерам"
+                : undefined
+            }
+          >
             {b.name}
+            {b.evidence && " ✓"}
             <strong>
               {b.from} → {b.to}
             </strong>
@@ -870,10 +1051,11 @@ function GoalModal({
     }
   }
   return (
-    <Modal title="Ваша карьерная цель" close={close}>
+    <Modal title="Карьерная цель сотрудника" close={close}>
       <p>
-        Можно развиваться в текущей роли или выбрать новое направление. Цель —
-        ваш выбор.
+        Только HR задаёт и меняет цель после обсуждения с сотрудником. Новое
+        направление — план развития, а не автоматическая смена должности.
+        Текущие роль, грейд и оценки навыков не изменятся.
       </p>
       <form onSubmit={save}>
         <label>
@@ -1088,11 +1270,12 @@ function HR({
             нагрузку, доступность и актуальность цели.
           </p>
           <small>
-            Срок на грейде не рассчитан: в датасете нет даты перехода. Стаж
-            работы не подменяет её.
+            Срок на грейде показывается только при явно указанной HR дате. В
+            исходном датасете её нет; стаж работы не подменяет дату перехода.
           </small>
         </section>
       </div>
+      <EvidenceHRPanel onSelect={onSelect} />
       <section className="panel table-panel">
         <div className="panel-title">
           <h2>
@@ -1141,10 +1324,13 @@ function HR({
                   <td>
                     {e.role}
                     <small>{e.grade}</small>
+                    {e.grade_months !== null && (
+                      <small>{e.grade_months} мес. на грейде</small>
+                    )}
                   </td>
                   <td>
                     {e.goal
-                      ? `${e.goal.target_grade} · ${e.readiness}%`
+                      ? `${e.goal.target_grade} · ${e.readiness === null ? "нужна оценка" : `${e.readiness}%`}`
                       : "Не выбрана"}
                   </td>
                   <td>
@@ -1182,11 +1368,16 @@ function HR({
         <ImportModal close={() => setImportOpen(false)} saved={refresh} />
       )}{" "}
       {createOpen && (
-        <CreateModal
-          catalog={catalog}
-          close={() => setCreateOpen(false)}
-          saved={refresh}
-        />
+        <Modal title="Новый сотрудник" wide close={() => setCreateOpen(false)}>
+          <CreateEmployeeForm
+            catalog={catalog}
+            saved={refresh}
+            openProfile={(id) => {
+              setCreateOpen(false);
+              onSelect(id);
+            }}
+          />
+        </Modal>
       )}{" "}
       {review && (
         <ReviewModal
@@ -1265,99 +1456,6 @@ function ImportModal({
     </Modal>
   );
 }
-function CreateModal({
-  catalog,
-  close,
-  saved,
-}: {
-  catalog: Catalog;
-  close: () => void;
-  saved: () => void;
-}) {
-  const [name, setName] = useState(""),
-    [id, setID] = useState(""),
-    [role, setRole] = useState(catalog.profiles[0].role),
-    [grade, setGrade] = useState("Junior"),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await post("/hr/employees", {
-        employee_id: id,
-        full_name: name,
-        department: role,
-        role,
-        grade,
-        manager_id: null,
-        hire_date: catalog.as_of,
-        tenure_months: 0,
-        work_format: "hybrid",
-        preferred_language: "ru",
-        career_goal: null,
-        skills: {},
-        last_review_date: catalog.as_of,
-      });
-      saved();
-      close();
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Modal title="Новый демо-сотрудник" close={close}>
-      <p>
-        Создаём профиль без оценки навыков. Пустой навык будет помечен «не
-        оценён», а не считаться доказанной слабостью. Готовую оценку можно
-        загрузить в составе нового профиля через импорт.
-      </p>
-      <form onSubmit={submit}>
-        <label>
-          Идентификатор
-          <input
-            value={id}
-            onChange={(e) => setID(e.target.value)}
-            placeholder="E0201"
-            pattern="[A-Za-z0-9_-]{1,50}"
-            required
-          />
-        </label>
-        <label>
-          Имя синтетического сотрудника
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={150}
-            required
-          />
-        </label>
-        <label>
-          Роль
-          <select value={role} onChange={(e) => setRole(e.target.value)}>
-            {[...new Set(catalog.profiles.map((p) => p.role))].map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Грейд
-          <select value={grade} onChange={(e) => setGrade(e.target.value)}>
-            {["Junior", "Middle", "Senior", "Lead"].map((g) => (
-              <option key={g}>{g}</option>
-            ))}
-          </select>
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button className="primary full" disabled={busy}>
-          Создать профиль
-        </button>
-      </form>
-    </Modal>
-  );
-}
 function ReviewModal({
   item,
   close,
@@ -1425,14 +1523,14 @@ function Connections() {
     <>
       <div className="page-title">
         <div>
-          <span className="eyebrow">СЛЕДУЮЩИЙ ЭТАП</span>
+          <span className="eyebrow">РАБОЧИЕ ПРИМЕРЫ</span>
           <h1>Навыки из реальной работы</h1>
           <p>
-            Архитектура интеграций согласована. Подключений к рабочим системам
-            пока нет.
+            Анализ работает на синтетическом импорте в формате будущих
+            коннекторов. Живых подключений к рабочим системам пока нет.
           </p>
         </div>
-        <span className="badge">В разработке</span>
+        <span className="badge">Синтетический импорт</span>
       </div>
       <div className="quest-grid">
         {[
@@ -1455,7 +1553,9 @@ function Connections() {
             </span>
             <h2>{name}</h2>
             <p>{description}</p>
-            <span className="status">Не подключено</span>
+            <span className="status">
+              Импорт JSON · живое подключение не настроено
+            </span>
           </section>
         ))}
       </div>

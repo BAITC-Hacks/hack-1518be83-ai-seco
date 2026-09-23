@@ -64,8 +64,8 @@ def test_invalid_json_shape_returns_validation_error(client):
         )
 
 
-def test_clear_own_goal(client):
-    sign_in(client)
+def test_hr_can_clear_employee_goal(client):
+    sign_in(client, "hr")
     assert (
         client.put(
             "/api/employees/E1/goal", content="null", headers={"Content-Type": "application/json"}

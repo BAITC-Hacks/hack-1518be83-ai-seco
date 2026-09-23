@@ -8,6 +8,9 @@ export type Employee = {
   employee_id: string;
   full_name: string;
   department: string;
+  hire_date: string;
+  work_format: string;
+  preferred_language: string;
   role: string;
   grade: string;
   career_goal: Goal | null;
@@ -32,7 +35,13 @@ export type Quest = {
   next_session: string | null;
   reason: string;
   past_misses: number;
-  benefits: { name: string; from: number; to: number; critical: boolean }[];
+  benefits: {
+    name: string;
+    from: number;
+    to: number;
+    critical: boolean;
+    evidence?: boolean;
+  }[];
 };
 export type History = {
   record_id: string;
@@ -64,11 +73,29 @@ export type Profile = {
   completions: Completion[];
   notice: string;
   as_of: string;
+  grade_since: string | null;
+  grade_months: number | null;
+  onboarding: {
+    status: "pending_assessment" | "assessed";
+    specialization: string;
+  } | null;
+  assessment: {
+    assessed_on: string;
+    method: string;
+    reviewer: string;
+    note: string;
+    ratings: { skill_id: string; level: number; evidence: string }[];
+  } | null;
 };
 export type Catalog = {
   as_of: string;
   ai_available: boolean;
-  profiles: { role: string; grade: string }[];
+  profiles: {
+    role: string;
+    grade: string;
+    required_skills: Record<string, number>;
+    critical_skills: string[];
+  }[];
   skills: { skill_id: string; name: string }[];
 };
 export type HRRow = {
@@ -79,6 +106,8 @@ export type HRRow = {
   readiness: number | null;
   signals: string[];
   goal: Goal | null;
+  grade_since: string | null;
+  grade_months: number | null;
 };
 export type Overview = {
   total: number;
@@ -86,4 +115,78 @@ export type Overview = {
   employees: HRRow[];
   pending: Completion[];
   gaps: { name: string; count: number }[];
+};
+export type EvidenceItem = {
+  artifact_id: string;
+  artifact_title: string;
+  source: string;
+  url: string;
+  version: string;
+  task_key: string;
+  finding_id?: string;
+  text?: string;
+  outcome?: "open" | "fixed";
+  shared: boolean;
+};
+export type Observation = {
+  observation_id: string;
+  criterion_id: string;
+  criterion_title: string;
+  skill_id: string;
+  kind: "development" | "strength";
+  task_keys: string[];
+  evidence: EvidenceItem[];
+  limitations: string[];
+  summary: string;
+  alternative: string;
+  summary_mode: "rules" | "ai";
+  status: "draft" | "confirmed" | "rejected";
+  comments: { author: string; role: string; text: string; at: string }[];
+  review: {
+    reviewer: string;
+    note: string;
+    decision: string;
+    at: string;
+  } | null;
+};
+export type WorkEvidence = {
+  artifacts: {
+    artifact_id: string;
+    source: string;
+    title: string;
+    version: string;
+    task_key: string | null;
+    contribution: "author" | "co_author";
+    shared: boolean;
+    findings: number;
+  }[];
+  tasks: {
+    task_id: string;
+    key: string;
+    title: string;
+    estimate_hours: number | null;
+    logged_hours: number;
+    blocked_hours: number;
+  }[];
+  observations: Observation[];
+  insufficient: {
+    criterion_id: string;
+    title: string;
+    kind: string;
+    tasks: string[];
+    reason: string;
+  }[];
+  focus: { skill_id: string; name: string; note: string; courses: string[] }[];
+  unmatched_artifacts: number | null;
+  skill_names: Record<string, string>;
+};
+export type EvidenceQueue = {
+  drafts: {
+    observation_id: string;
+    employee_id: string;
+    full_name: string;
+    criterion_title: string;
+    kind: string;
+    task_keys: string[];
+  }[];
 };
